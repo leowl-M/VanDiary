@@ -4,21 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VanDiary: Catania - Potenza</title>
-    
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- FontAwesome (per le icone) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+
     <!-- Leaflet (per la mappa) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
+
     <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    
+
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <!-- Babel (per compilare React nel browser) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
@@ -27,7 +30,7 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
-        
+
         /* Assicura che la mappa prenda gli eventi correttamente */
         .leaflet-container { z-index: 10; }
     </style>
@@ -38,46 +41,21 @@
     <script type="text/babel">
         const { useState, useRef, useMemo, useEffect } = React;
 
-        const MOCK_DATA = [
-          {
-            id: '1', type: 'text', title: 'La partenza dal porto', location: 'Catania', date: '2026-06-03',
-            text: 'Il van è finalmente carico. Abbiamo sistemato le ultime provviste e fatto il pieno. L\'Etna ci saluta alle spalle mentre imbocchiamo l\'autostrada. Direzione: Potenza!',
-            mediaUrl: null, lat: 37.5078, lng: 15.0830
-          },
-          {
-            id: '2', type: 'photo', title: 'L\'attraversamento dello Stretto', location: 'Messina', date: '2026-06-04',
-            text: 'Arancino d\'ordinanza sul traghetto. Lasciare la Sicilia fa sempre un po\' effetto, ma la Calabria ci aspetta.',
-            mediaUrl: 'https://images.unsplash.com/photo-1596404760447-02058fa4e7a8?auto=format&fit=crop&q=80&w=800',
-            lat: 38.1938, lng: 15.5540
-          },
-          {
-            id: '3', type: 'photo', title: 'Pausa nel verde', location: 'Parco Nazionale del Pollino', date: '2026-06-06',
-            text: 'Abbiamo parcheggiato il van in una radura spettacolare. L\'aria è fresca e stanotte dormiremo sotto un cielo pieno di stelle.',
-            mediaUrl: 'https://images.unsplash.com/photo-1523987355523-c7b5b0dd90a7?auto=format&fit=crop&q=80&w=800',
-            lat: 39.9414, lng: 16.1185
-          },
-          {
-            id: '4', type: 'audio', title: 'I suoni del bosco', location: 'Parco Nazionale del Pollino', date: '2026-06-06',
-            text: 'Registrazione dei grilli e del vento tra gli alberi al tramonto. Pura pace.',
-            mediaUrl: null, lat: 39.9414, lng: 16.1185
-          }
-        ];
-
-        const MOCK_EVENTS = [
-          { id: 'e1', key: 'caffe', lat: 37.5100, lng: 15.0900, timestamp: '2026-06-03T08:30:00Z' },
-          { id: 'e2', key: 'caffe', lat: 38.0000, lng: 15.3000, timestamp: '2026-06-03T11:15:00Z' },
-          { id: 'e3', key: 'bruno', lat: 38.2000, lng: 15.5600, timestamp: '2026-06-03T12:00:00Z' },
-          { id: 'e4', key: 'strada', lat: 38.8000, lng: 16.0000, timestamp: '2026-06-03T14:20:00Z' },
-          { id: 'e5', key: 'bestemmie', lat: 38.8000, lng: 16.0000, timestamp: '2026-06-03T14:21:00Z' },
-          { id: 'e6', key: 'scaffe', lat: 37.6000, lng: 15.1000, timestamp: '2026-06-03T15:00:00Z' },
-          { id: 'e7', key: 'ritardi', lat: 38.1000, lng: 15.4000, timestamp: '2026-06-03T16:00:00Z' }
-        ];
+        // ========== SUPABASE CONFIG ==========
+        // 1. Vai su https://supabase.com e crea un progetto gratuito
+        // 2. Settings → API → copia Project URL e anon public key
+        const SUPABASE_URL = 'https://buxyihdvmdaltvwzdmez.supabase.co';  // <-- sostituisci
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1eHlpaGR2bWRhbHR2d3pkbWV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0OTQyMDUsImV4cCI6MjA5NjA3MDIwNX0.JifKRtrM1ZJowQ7Qebi-60eY9jG4XLer7FnvWp-wHj8';            // <-- sostituisci
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // =====================================
 
         function VanDiaryApp() {
-          const [memories, setMemories] = useState(MOCK_DATA);
-          const [activeTab, setActiveTab] = useState('map'); 
+          const [memories, setMemories] = useState([]);
+          const [activeTab, setActiveTab] = useState('map');
           const [selectedPinInfo, setSelectedPinInfo] = useState(null);
-          const [counterEvents, setCounterEvents] = useState(MOCK_EVENTS);
+          const [counterEvents, setCounterEvents] = useState([]);
+          const [loading, setLoading] = useState(true);
+          const [saving, setSaving] = useState(false);
 
           const counterConfig = useMemo(() => [
             { key: 'caffe', label: 'Caffè bevuti', icon: 'mug-hot', color: 'text-amber-700', bg: 'bg-amber-100', border: 'border-amber-200', hex: '#b45309' },
@@ -92,6 +70,20 @@
             { key: 'scaffe', label: 'Scaffe prese', icon: 'triangle-exclamation', color: 'text-yellow-600', bg: 'bg-yellow-100', border: 'border-yellow-200', hex: '#ca8a04' },
             { key: 'mutismo', label: 'Mutismo selettivo', icon: 'volume-xmark', color: 'text-teal-600', bg: 'bg-teal-100', border: 'border-teal-200', hex: '#0d9488' },
           ], []);
+
+          // --- CARICAMENTO DA SUPABASE ---
+          useEffect(() => {
+            async function loadData() {
+              const [{ data: mems }, { data: evts }] = await Promise.all([
+                sb.from('memories').select('*').order('date'),
+                sb.from('counter_events').select('*').order('timestamp')
+              ]);
+              setMemories((mems || []).map(m => ({ ...m, mediaUrl: m.media_url })));
+              setCounterEvents(evts || []);
+              setLoading(false);
+            }
+            loadData();
+          }, []);
 
           const counters = useMemo(() => {
             const counts = {};
@@ -143,28 +135,48 @@
             }
           };
 
-          const handleAddMemory = (e) => {
+          const handleAddMemory = async (e) => {
             e.preventDefault();
             if (!title || !location || !date) return;
+            setSaving(true);
+
+            let mediaUrl = null;
+
+            if (mediaFile) {
+              const ext = mediaFile.name.split('.').pop();
+              const path = `${Date.now()}.${ext}`;
+              const { data: uploadData, error: uploadError } = await sb.storage
+                .from('media')
+                .upload(path, mediaFile, { contentType: mediaFile.type });
+              if (!uploadError) {
+                const { data: urlData } = sb.storage.from('media').getPublicUrl(uploadData.path);
+                mediaUrl = urlData.publicUrl;
+              }
+            }
 
             const newMemory = {
               id: Date.now().toString(),
               type: memoryType,
               title, location, date, text,
-              mediaUrl: mediaPreview || null,
+              media_url: mediaUrl,
               lat: memoryCoords?.lat || null,
               lng: memoryCoords?.lng || null
             };
 
-            const updatedMemories = [...memories, newMemory].sort((a, b) => new Date(a.date) - new Date(b.date));
-            setMemories(updatedMemories);
-            
+            const { data, error } = await sb.from('memories').insert(newMemory).select().single();
+            if (!error && data) {
+              const memForState = { ...data, mediaUrl: data.media_url };
+              setMemories(prev => [...prev, memForState].sort((a, b) => new Date(a.date) - new Date(b.date)));
+            }
+
+            setSaving(false);
             setTitle(''); setLocation(''); setText('');
             setMediaFile(null); setMediaPreview(null); setMemoryCoords(null);
             setActiveTab('timeline');
           };
 
-          const deleteMemory = (id) => {
+          const deleteMemory = async (id) => {
+            await sb.from('memories').delete().eq('id', id);
             setMemories(memories.filter(m => m.id !== id));
           };
 
@@ -191,16 +203,22 @@
             if (delta > 0) {
               const newId = Date.now().toString();
               const now = new Date().toISOString();
-              setCounterEvents(prev => [...prev, { id: newId, key, lat: null, lng: null, timestamp: now }]);
-              
+              const newEvent = { id: newId, key, lat: null, lng: null, timestamp: now };
+
+              sb.from('counter_events').insert(newEvent);
+              setCounterEvents(prev => [...prev, newEvent]);
+
               if ('geolocation' in navigator) {
                 navigator.geolocation.getCurrentPosition(
-                  (pos) => {
-                    setCounterEvents(prev => prev.map(ev => 
-                      ev.id === newId ? { ...ev, lat: pos.coords.latitude, lng: pos.coords.longitude } : ev
+                  async (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    await sb.from('counter_events').update({ lat, lng }).eq('id', newId);
+                    setCounterEvents(prev => prev.map(ev =>
+                      ev.id === newId ? { ...ev, lat, lng } : ev
                     ));
                   },
-                  (err) => console.warn("GPS ignorato per evento rapido.")
+                  () => console.warn("GPS ignorato per evento rapido.")
                 );
               }
             } else {
@@ -208,6 +226,7 @@
                 const copy = [...prev];
                 for(let i = copy.length - 1; i >= 0; i--) {
                   if (copy[i].key === key) {
+                    sb.from('counter_events').delete().eq('id', copy[i].id);
                     copy.splice(i, 1);
                     break;
                   }
@@ -221,10 +240,10 @@
           const stats = useMemo(() => {
             const total = memories.length;
             const locations = new Set(memories.map(m => m.location.toLowerCase().trim())).size;
-            
+
             const types = { photo: 0, video: 0, audio: 0, text: 0 };
             memories.forEach(m => { if(types[m.type] !== undefined) types[m.type]++; });
-            
+
             const typePercentages = {
               photo: total ? (types.photo / total) * 100 : 0,
               video: total ? (types.video / total) * 100 : 0,
@@ -235,9 +254,9 @@
             const dates = {};
             memories.forEach(m => { dates[m.date] = (dates[m.date] || 0) + 1; });
             const sortedDates = Object.keys(dates).sort();
-            const dateActivity = sortedDates.map(d => ({ 
-              date: new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }), 
-              count: dates[d] 
+            const dateActivity = sortedDates.map(d => ({
+              date: new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }),
+              count: dates[d]
             }));
             const maxActivity = Math.max(...dateActivity.map(d => d.count), 1);
 
@@ -305,6 +324,16 @@
             };
           }, [memories, counterEvents, activeTab, counterConfig]);
 
+          // --- LOADING SCREEN ---
+          if (loading) return (
+            <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+              <div className="text-center">
+                <i className="fa-solid fa-location-arrow text-5xl text-emerald-600 mb-6 block" style={{animation: 'pulse 1.5s ease-in-out infinite'}}></i>
+                <p className="text-stone-500 font-bold text-lg">Caricamento diario...</p>
+              </div>
+            </div>
+          );
+
           // --- VISTE ---
 
           const renderMapView = () => (
@@ -336,12 +365,12 @@
 
               <div className="bg-white rounded-xl shadow-md border border-stone-200 overflow-hidden relative">
                 <div ref={mapRef} className="w-full h-[65vh] z-0"></div>
-                
+
                 <div className="absolute bottom-4 left-4 z-[999] bg-white/95 backdrop-blur px-3 py-2 rounded-xl shadow-lg border border-stone-200 text-xs font-bold text-stone-600 flex flex-col gap-2 max-h-[40vh] overflow-y-auto no-scrollbar">
                  <div className="flex items-center gap-2 mb-1 border-b border-stone-100 pb-1"><div className="w-3 h-3 rounded-full bg-[#fc4c02] border-2 border-white"></div> Tappe (Ricordi)</div>
                  {counterConfig.map(conf => (
                    <div key={conf.key} className="flex items-center gap-2">
-                     <div className="w-3 h-3 rounded-full border border-white" style={{backgroundColor: conf.hex}}></div> 
+                     <div className="w-3 h-3 rounded-full border border-white" style={{backgroundColor: conf.hex}}></div>
                      {conf.label}
                    </div>
                  ))}
@@ -450,7 +479,7 @@
               <h2 className="text-2xl font-bold text-stone-800 mb-6 flex items-center gap-2">
                 <i className="fa-solid fa-plus text-emerald-600"></i> Nuova Tappa
               </h2>
-              
+
               <div className="flex gap-2 mb-8 bg-stone-100 p-1.5 rounded-2xl overflow-x-auto no-scrollbar">
                 {['photo', 'video', 'audio', 'text'].map((type) => (
                   <button
@@ -499,8 +528,8 @@
                     <div onClick={() => fileInputRef.current.click()} className="w-full border-2 border-dashed border-emerald-200 rounded-2xl p-8 text-center cursor-pointer bg-emerald-50/30 hover:bg-emerald-50 transition-colors flex flex-col items-center justify-center gap-3">
                       <input type="file" ref={fileInputRef} accept={memoryType === 'photo' ? 'image/*' : memoryType === 'video' ? 'video/*' : 'audio/*'} onChange={handleFileChange} className="hidden" />
                       {mediaPreview ? (
-                        memoryType === 'photo' ? <img src={mediaPreview} alt="Preview" className="h-40 rounded-xl object-cover shadow-sm" /> : 
-                        memoryType === 'video' ? <video src={mediaPreview} className="h-40 rounded-xl object-cover shadow-sm" controls /> : 
+                        memoryType === 'photo' ? <img src={mediaPreview} alt="Preview" className="h-40 rounded-xl object-cover shadow-sm" /> :
+                        memoryType === 'video' ? <video src={mediaPreview} className="h-40 rounded-xl object-cover shadow-sm" controls /> :
                         <audio src={mediaPreview} controls className="w-full max-w-xs" />
                       ) : (
                         <>
@@ -519,8 +548,8 @@
                   <textarea value={text} onChange={e => setText(e.target.value)} rows={4} placeholder="Scrivi qui le emozioni di questa tappa..." className="w-full p-3.5 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none resize-none transition-all"></textarea>
                 </div>
 
-                <button type="submit" className="w-full py-4 mt-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white rounded-2xl font-black text-lg transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2">
-                  <i className="fa-solid fa-plus"></i> Salva nel Diario
+                <button type="submit" disabled={saving} className="w-full py-4 mt-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-60 text-white rounded-2xl font-black text-lg transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2">
+                  {saving ? <><i className="fa-solid fa-spinner animate-spin"></i> Salvataggio...</> : <><i className="fa-solid fa-plus"></i> Salva nel Diario</>}
                 </button>
               </form>
             </div>
@@ -681,7 +710,7 @@
                     </article>
                   ))}
                 </div>
-                
+
                 {memories.length > 0 && (
                    <footer className="text-center mt-12 md:mt-20 pt-10 border-t border-white/10 pb-20 md:pb-10">
                       <p className="text-stone-500 mb-8 font-medium">Fine del viaggio (per ora).</p>
@@ -701,7 +730,7 @@
 
           return (
             <div className="min-h-screen bg-stone-50 md:bg-stone-100 text-stone-800 font-sans selection:bg-emerald-200 pb-24 md:pb-0">
-              
+
               {/* Navbar Desktop */}
               <nav className="hidden md:block sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-stone-200 px-8 py-4">
                 <div className="max-w-6xl mx-auto flex justify-between items-center">
@@ -724,7 +753,7 @@
                       { id: 'stats', icon: 'chart-simple', label: 'Statistiche' },
                       { id: 'output', icon: 'play', label: 'Presentazione' }
                     ].map(tab => (
-                      <button 
+                      <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
                         className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-white text-emerald-700 shadow-sm' : 'text-stone-500 hover:text-stone-800'}`}
@@ -746,7 +775,7 @@
                     { id: 'stats', icon: 'chart-simple', label: 'Dati' },
                     { id: 'output', icon: 'play', label: 'Album' }
                   ].map(tab => (
-                    <button 
+                    <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={`flex flex-col items-center gap-1 w-full py-2 rounded-xl transition-all ${activeTab === tab.id ? 'text-emerald-600' : 'text-stone-400 hover:text-stone-600'}`}
