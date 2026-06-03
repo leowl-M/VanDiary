@@ -14,8 +14,45 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="VanDiary">
 
+    <!-- Inter (font) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Palette The Wave Studio + font Inter.
+      // Rimappo le scale 'emerald' (accento) e 'stone' (neutri) cosi' tutte
+      // le classi esistenti adottano i nuovi colori senza modifiche al markup.
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif']
+            },
+            colors: {
+              // Accento primario -> blu Wave #0057FF
+              emerald: {
+                50: '#EAF1FF', 100: '#D6E4FF', 200: '#ADC8FF', 300: '#7AA5FF',
+                400: '#3D7BFF', 500: '#1A66FF', 600: '#0057FF', 700: '#0046CC',
+                800: '#00379E', 900: '#002A78'
+              },
+              // Neutri caldi -> cream / sand / ink Wave
+              stone: {
+                50: '#FAF7EB', 100: '#F1ECDD', 200: '#CDC3BA', 300: '#B9AEA3',
+                400: '#9C9187', 500: '#6F665E', 600: '#514A44', 700: '#3C3733',
+                800: '#323232', 900: '#262524'
+              },
+              wave: {
+                blue: '#0057FF', yellow: '#FFD400', orange: '#F97D16',
+                sand: '#CDC3BA', cream: '#FAF7EB', ink: '#323232'
+              }
+            }
+          }
+        }
+      };
+    </script>
 
     <!-- FontAwesome (per le icone) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -78,7 +115,7 @@
         }
     </style>
 </head>
-<body class="bg-[#f8f9fa] text-stone-800 font-sans antialiased">
+<body class="bg-[#FAF7EB] text-stone-800 font-sans antialiased">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -137,7 +174,7 @@
           }, [pwd]);
 
           return (
-            <div className="min-h-screen bg-[#0f0f0f] flex flex-col items-center justify-center p-6 select-none relative overflow-hidden">
+            <div className="min-h-screen bg-[#323232] flex flex-col items-center justify-center p-6 select-none relative overflow-hidden">
               {/* Background Glow */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-600/10 blur-[120px] rounded-full pointer-events-none"></div>
               
@@ -221,9 +258,9 @@
 
           const gameLevels = useMemo(() => [
             { id: 'tutte', label: 'Tutte', icon: 'shuffle', color: 'text-stone-700', bg: 'bg-stone-100/60', hex: '#44403c' },
-            { id: 'soft', label: 'Dolci', icon: 'heart', color: 'text-emerald-600', bg: 'bg-emerald-100/60', hex: '#059669' },
-            { id: 'piccante', label: 'Piccanti', icon: 'pepper-hot', color: 'text-orange-600', bg: 'bg-orange-100/60', hex: '#ea580c' },
-            { id: 'hot', label: 'Hot', icon: 'fire', color: 'text-red-600', bg: 'bg-red-100/60', hex: '#dc2626' },
+            { id: 'facile', label: 'Facile', icon: 'face-laugh', color: 'text-emerald-600', bg: 'bg-emerald-100/60', hex: '#059669' },
+            { id: 'medio', label: 'Medio', icon: 'users', color: 'text-amber-600', bg: 'bg-amber-100/60', hex: '#d97706' },
+            { id: 'difficile', label: 'Estremo', icon: 'skull', color: 'text-red-600', bg: 'bg-red-100/60', hex: '#dc2626' },
           ], []);
 
           const questionPool = useMemo(() => {
@@ -494,7 +531,7 @@
                   bounds.push([m.lat, m.lng]);
                   const icon = window.L.divIcon({
                     className: 'custom-pin',
-                    html: `<div style="background-color: #fc4c02; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 8px rgba(0,0,0,0.15); transition: transform 0.2s;"><div style="width: 8px; height: 8px; background: white; border-radius: 50%;"></div></div>`,
+                    html: `<div style="background-color: #F97D16; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 8px rgba(0,0,0,0.15); transition: transform 0.2s;"><div style="width: 8px; height: 8px; background: white; border-radius: 50%;"></div></div>`,
                     iconSize: [24, 24],
                     iconAnchor: [12, 12]
                   });
@@ -567,7 +604,7 @@
             <div className="max-w-4xl mx-auto py-6 md:py-8 space-y-6 px-4">
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-14 h-14 bg-white/80 backdrop-blur rounded-[1.5rem] flex items-center justify-center shadow-sm border border-white/60">
-                   <i className="fa-solid fa-route text-2xl text-[#fc4c02]"></i>
+                   <i className="fa-solid fa-route text-2xl text-[#F97D16]"></i>
                 </div>
                 <div>
                   <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tighter leading-none">Mappa</h2>
@@ -581,7 +618,7 @@
                 <div className="absolute top-4 right-4 z-[999] glass-card px-4 py-3 rounded-2xl shadow-lg flex flex-col gap-2 max-h-[40vh] overflow-y-auto no-scrollbar">
                  <div className="flex items-center gap-2 mb-1 border-b border-stone-200/30 pb-1 text-[11px] font-black uppercase text-stone-400 tracking-wider">Legenda</div>
                  <div className="flex items-center gap-3 text-xs font-bold text-stone-700">
-                    <div className="w-3.5 h-3.5 rounded-full bg-[#fc4c02] border-2 border-white shadow-sm"></div> Tappe
+                    <div className="w-3.5 h-3.5 rounded-full bg-[#F97D16] border-2 border-white shadow-sm"></div> Tappe
                  </div>
                  {counterConfig.map(conf => (
                    <div key={conf.key} className="flex items-center gap-3 text-xs font-bold text-stone-700">
@@ -942,7 +979,7 @@
                   {currentQ ? (
                     <>
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: meta.hex + '22', color: meta.hex }}>
-                        <i className={`fa-solid fa-${currentQ.pref ? 'code-branch' : meta.icon}`}></i> {currentQ.pref ? 'Preferiresti' : meta.label}
+                        <i className={`fa-solid fa-${meta.icon}`}></i> {meta.label}
                       </span>
                       <p className={`text-2xl md:text-3xl font-black text-stone-900 tracking-tight leading-snug relative z-10 transition-all duration-200 ${qSpin ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
                         {currentQ.t}
@@ -966,7 +1003,7 @@
           };
 
           const renderOutputView = () => (
-            <div id="album-print" className="min-h-screen bg-[#0a0a0a] text-stone-100 px-6 py-8 sm:p-10 md:p-12 mx-4 md:mx-0 rounded-[2.5rem] md:rounded-[3rem] shadow-3xl relative overflow-hidden">
+            <div id="album-print" className="min-h-screen bg-[#2B2A28] text-stone-100 px-6 py-8 sm:p-10 md:p-12 mx-4 md:mx-0 rounded-[2.5rem] md:rounded-[3rem] shadow-3xl relative overflow-hidden">
               {/* Decorative elements */}
               <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
                  <div className="absolute top-1/4 right-0 w-96 h-96 bg-emerald-600/30 blur-[150px] rounded-full"></div>
