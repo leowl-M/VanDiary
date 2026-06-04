@@ -104,6 +104,42 @@
         }
         .animate-float { animation: float 3s ease-in-out infinite; }
 
+        /* ===== App-like mobile ===== */
+        html { -webkit-text-size-adjust: 100%; }
+        body {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;          /* niente delay/zoom da doppio tap */
+            overscroll-behavior-y: contain;       /* stop pull-to-refresh accidentale */
+        }
+        * { -webkit-tap-highlight-color: transparent; }
+        button, a { touch-action: manipulation; }
+        /* iOS: input < 16px fa auto-zoom al focus. Forziamo 16px. */
+        input, textarea, select { font-size: 16px; }
+        /* Scroll fluido con inerzia nei container scrollabili */
+        .no-scrollbar, .overflow-y-auto, .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+        /* Safe-area helpers (notch / home indicator) */
+        .safe-top { padding-top: env(safe-area-inset-top, 0px); }
+
+        /* ===== Marker VAN sulla mappa ===== */
+        .van-marker { position: relative; }
+        .van-dot {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 34px; height: 34px; border-radius: 50%;
+            background: #0057FF; color: #fff; border: 3px solid #fff;
+            box-shadow: 0 4px 12px rgba(0,87,255,0.45);
+            display: flex; align-items: center; justify-content: center; font-size: 15px;
+        }
+        .van-pulse {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 34px; height: 34px; border-radius: 50%;
+            background: rgba(0,87,255,0.35);
+            animation: vanpulse 1.8s ease-out infinite;
+        }
+        @keyframes vanpulse {
+            0%   { transform: translate(-50%,-50%) scale(1); opacity: 0.6; }
+            100% { transform: translate(-50%,-50%) scale(2.6); opacity: 0; }
+        }
+
         /* Print: l'Album è scuro → forza sfondo bianco e testo leggibile nel PDF */
         @media print {
             nav, .print\:hidden { display: none !important; }
@@ -255,6 +291,10 @@
           const [gameLevel, setGameLevel] = useState('tutte');
           const [currentQ, setCurrentQ] = useState(null);
           const [qSpin, setQSpin] = useState(false);
+          const [vanPos, setVanPos] = useState(null);
+          const [vanFollow, setVanFollow] = useState(false);
+          const [vanBusy, setVanBusy] = useState(false);
+          const [geoMsg, setGeoMsg] = useState('');
 
           const gameLevels = useMemo(() => [
             { id: 'tutte', label: 'Tutte', icon: 'shuffle', color: 'text-stone-700', bg: 'bg-stone-100/60', hex: '#44403c' },
@@ -326,6 +366,32 @@
 
           useEffect(() => { loadData(); }, []);
 
+          // App-like: torna in cima quando cambi sezione
+          useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [activeTab]);
+
+          // Posizione van all'avvio + stop del watch GPS allo smontaggio
+          useEffect(() => { loadVanPos(); }, []);
+          useEffect(() => () => { if (watchRef.current != null) navigator.geolocation.clearWatch(watchRef.current); }, []);
+
+          // Geocoding di recupero: i ricordi salvati col solo nome (senza GPS)
+          // ottengono coordinate dal nome luogo quando apri la mappa.
+          useEffect(() => {
+            if (activeTab !== 'map' || geoBackfillDone.current) return;
+            const missing = memories.filter(m => m.location && (!m.lat || !m.lng));
+            if (missing.length === 0) return;
+            geoBackfillDone.current = true;
+            (async () => {
+              for (const m of missing) {
+                const c = await geocodePlace(m.location);
+                if (c) {
+                  try { await sb.from('memories').update({ lat: c.lat, lng: c.lng }).eq('id', m.id); } catch (e) {}
+                  setMemories(prev => prev.map(x => x.id === m.id ? { ...x, lat: c.lat, lng: c.lng } : x));
+                }
+                await new Promise(r => setTimeout(r, 1100)); // rispetta il rate limit di Nominatim
+              }
+            })();
+          }, [activeTab, memories]);
+
           const counters = useMemo(() => {
             const counts = {};
             counterConfig.forEach(conf => { counts[conf.key] = 0; });
@@ -347,24 +413,142 @@
           const [isLocating, setIsLocating] = useState(false);
           const fileInputRef = useRef(null);
           const mapRef = useRef(null);
+          const mapInstanceRef = useRef(null);
+          const vanMarkerRef = useRef(null);
+          const watchRef = useRef(null);
+          const lastSaveRef = useRef(0);
+          const geocodeCache = useRef({});
+          const geoBackfillDone = useRef(false);
 
-          const handleGetLocation = () => {
+          // GPS affidabile: alta precisione, timeout generoso, Promise.
+          const getPosition = (opts = {}) => new Promise((resolve, reject) => {
+            if (!('geolocation' in navigator)) { reject({ code: 0 }); return; }
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true, timeout: 15000, maximumAge: 10000, ...opts
+            });
+          });
+
+          const geoError = (e) => {
+            if (!e) return 'Errore GPS';
+            if (e.code === 1) return 'Permesso negato: abilita la posizione nelle impostazioni.';
+            if (e.code === 2) return 'Posizione non disponibile in questo momento.';
+            if (e.code === 3) return 'GPS lento: riprova all\'aperto.';
+            return 'GPS non supportato su questo dispositivo.';
+          };
+
+          const handleGetLocation = async () => {
             setIsLocating(true);
-            if ('geolocation' in navigator) {
-              navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                  setMemoryCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-                  setIsLocating(false);
-                },
-                (err) => {
-                  console.warn(err);
-                  setIsLocating(false);
-                },
-                { timeout: 10000 }
-              );
-            } else {
+            setGeoMsg('');
+            try {
+              const pos = await getPosition();
+              setMemoryCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            } catch (e) {
+              setGeoMsg(geoError(e));
+            } finally {
               setIsLocating(false);
             }
+          };
+
+          // ===== POSIZIONE VAN (condivisa via Supabase, fallback localStorage) =====
+          const loadVanPos = async () => {
+            try {
+              const ls = JSON.parse(localStorage.getItem('vd_van') || 'null');
+              if (ls) setVanPos(ls);
+            } catch (e) {}
+            try {
+              const { data, error } = await sb.from('van_position').select('*').eq('id', 'van').maybeSingle();
+              if (!error && data) {
+                const v = { lat: data.lat, lng: data.lng, updated_at: data.updated_at };
+                setVanPos(v);
+                localStorage.setItem('vd_van', JSON.stringify(v));
+              }
+            } catch (e) { /* tabella assente: resta su localStorage */ }
+          };
+
+          const saveVanPos = async (lat, lng) => {
+            const v = { lat, lng, updated_at: new Date().toISOString() };
+            setVanPos(v);
+            try { localStorage.setItem('vd_van', JSON.stringify(v)); } catch (e) {}
+            try { await sb.from('van_position').upsert({ id: 'van', lat, lng, updated_at: v.updated_at }); }
+            catch (e) { console.warn('Van non salvato sul cloud:', e); }
+          };
+
+          const handleVanHere = async () => {
+            setVanBusy(true);
+            setGeoMsg('');
+            try {
+              const pos = await getPosition();
+              const lat = pos.coords.latitude, lng = pos.coords.longitude;
+              await saveVanPos(lat, lng);
+              if (mapInstanceRef.current) mapInstanceRef.current.setView([lat, lng], 14, { animate: true });
+              setGeoMsg('Van aggiornato 🚐');
+            } catch (e) {
+              setGeoMsg(geoError(e));
+            } finally {
+              setVanBusy(false);
+            }
+          };
+
+          const toggleFollow = () => {
+            if (vanFollow) {
+              if (watchRef.current != null) navigator.geolocation.clearWatch(watchRef.current);
+              watchRef.current = null;
+              setVanFollow(false);
+              return;
+            }
+            if (!('geolocation' in navigator)) { setGeoMsg(geoError({ code: 0 })); return; }
+            setVanFollow(true);
+            setGeoMsg('Ti sto seguendo…');
+            watchRef.current = navigator.geolocation.watchPosition(
+              (pos) => {
+                const lat = pos.coords.latitude, lng = pos.coords.longitude;
+                setVanPos({ lat, lng, updated_at: new Date().toISOString() });
+                if (mapInstanceRef.current) mapInstanceRef.current.panTo([lat, lng], { animate: true });
+                const now = Date.now();
+                if (now - lastSaveRef.current > 15000) { lastSaveRef.current = now; saveVanPos(lat, lng); }
+              },
+              (e) => { setGeoMsg(geoError(e)); setVanFollow(false); if (watchRef.current != null) { navigator.geolocation.clearWatch(watchRef.current); watchRef.current = null; } },
+              { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
+            );
+          };
+
+          const makeVanIcon = () => window.L.divIcon({
+            className: 'van-marker',
+            html: '<span class="van-pulse"></span><div class="van-dot"><i class="fa-solid fa-van-shuttle"></i></div>',
+            iconSize: [46, 46], iconAnchor: [23, 23]
+          });
+
+          const vanAgo = (iso) => {
+            if (!iso) return '';
+            const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+            if (isNaN(diff)) return '';
+            if (diff < 1) return 'ora';
+            if (diff < 60) return `${diff} min fa`;
+            const h = Math.floor(diff / 60);
+            if (h < 24) return `${h}h fa`;
+            return `${Math.floor(h / 24)}g fa`;
+          };
+
+          // Converte un nome di luogo in coordinate (OpenStreetMap Nominatim), con cache.
+          const geocodePlace = async (name) => {
+            if (!name) return null;
+            const key = name.toLowerCase().trim();
+            if (geocodeCache.current[key]) return geocodeCache.current[key];
+            try {
+              const ls = JSON.parse(localStorage.getItem('vd_geocache') || '{}');
+              if (ls[key]) { geocodeCache.current[key] = ls[key]; return ls[key]; }
+            } catch (e) {}
+            try {
+              const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=it&q=${encodeURIComponent(name)}`, { headers: { 'Accept': 'application/json' } });
+              const arr = await res.json();
+              if (arr && arr[0]) {
+                const coords = { lat: parseFloat(arr[0].lat), lng: parseFloat(arr[0].lon) };
+                geocodeCache.current[key] = coords;
+                try { const ls = JSON.parse(localStorage.getItem('vd_geocache') || '{}'); ls[key] = coords; localStorage.setItem('vd_geocache', JSON.stringify(ls)); } catch (e) {}
+                return coords;
+              }
+            } catch (e) { console.warn('Geocoding fallito:', e); }
+            return null;
           };
 
           const handleFileChange = (e) => {
@@ -395,13 +579,17 @@
               }
             }
 
+            // Coordinate: prima il GPS; se assente, geocoda il nome del luogo.
+            let coords = memoryCoords;
+            if (!coords) coords = await geocodePlace(location);
+
             const newMemory = {
               id: Date.now().toString(),
               type: memoryType,
               title, location, date, text,
               media_url: mediaUrl,
-              lat: memoryCoords?.lat || null,
-              lng: memoryCoords?.lng || null
+              lat: coords?.lat || null,
+              lng: coords?.lng || null
             };
 
             const { data, error } = await sb.from('memories').insert(newMemory).select().single();
@@ -547,6 +735,8 @@
               }
 
               mapInstance = window.L.map(mapRef.current).setView([39.0, 15.5], 7);
+              mapInstanceRef.current = mapInstance;
+              vanMarkerRef.current = null;
               window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                 attribution: '© OpenStreetMap contributors'
               }).addTo(mapInstance);
@@ -582,8 +772,15 @@
                 }
               });
 
+              // Marker VAN (posizione attuale / aggiornabile)
+              if (vanPos && vanPos.lat && vanPos.lng) {
+                bounds.push([vanPos.lat, vanPos.lng]);
+                vanMarkerRef.current = window.L.marker([vanPos.lat, vanPos.lng], { icon: makeVanIcon(), zIndexOffset: 1000 }).addTo(mapInstance);
+                vanMarkerRef.current.on('click', () => setSelectedPinInfo({ isVan: true, ...vanPos }));
+              }
+
               if (bounds.length > 0) {
-                mapInstance.fitBounds(window.L.latLngBounds(bounds), { padding: [40, 40] });
+                mapInstance.fitBounds(window.L.latLngBounds(bounds), { padding: [50, 50], maxZoom: 14 });
               }
             };
 
@@ -593,8 +790,26 @@
 
             return () => {
               if (mapInstance) mapInstance.remove();
+              mapInstanceRef.current = null;
+              vanMarkerRef.current = null;
             };
           }, [memories, counterEvents, activeTab, counterConfig]);
+
+          // Aggiorna il marker van in tempo reale senza re-inizializzare la mappa
+          useEffect(() => {
+            const map = mapInstanceRef.current;
+            if (!map || !window.L || activeTab !== 'map') return;
+            if (!vanPos || !vanPos.lat) {
+              if (vanMarkerRef.current) { map.removeLayer(vanMarkerRef.current); vanMarkerRef.current = null; }
+              return;
+            }
+            if (vanMarkerRef.current) {
+              vanMarkerRef.current.setLatLng([vanPos.lat, vanPos.lng]);
+            } else {
+              vanMarkerRef.current = window.L.marker([vanPos.lat, vanPos.lng], { icon: makeVanIcon(), zIndexOffset: 1000 }).addTo(map);
+              vanMarkerRef.current.on('click', () => setSelectedPinInfo({ isVan: true, ...vanPos }));
+            }
+          }, [vanPos, activeTab]);
 
           // --- AUTH GATE (dopo tutti gli hook, per non violare le Rules of Hooks) ---
           if (!authed) return <LoginScreen onSuccess={() => setAuthed(true)} />;
@@ -645,6 +860,9 @@
                 <div className="absolute top-4 right-4 z-[999] glass-card px-4 py-3 rounded-2xl shadow-lg flex flex-col gap-2 max-h-[40vh] overflow-y-auto no-scrollbar">
                  <div className="flex items-center gap-2 mb-1 border-b border-stone-200/30 pb-1 text-[11px] font-black uppercase text-stone-400 tracking-wider">Legenda</div>
                  <div className="flex items-center gap-3 text-xs font-bold text-stone-700">
+                    <div className="w-3.5 h-3.5 rounded-full bg-[#0057FF] border-2 border-white shadow-sm flex items-center justify-center"><i className="fa-solid fa-van-shuttle text-white" style={{fontSize:'6px'}}></i></div> Van
+                 </div>
+                 <div className="flex items-center gap-3 text-xs font-bold text-stone-700">
                     <div className="w-3.5 h-3.5 rounded-full bg-[#F97D16] border-2 border-white shadow-sm"></div> Tappe
                  </div>
                  {counterConfig.map(conf => (
@@ -653,6 +871,33 @@
                      {conf.label}
                    </div>
                  ))}
+                </div>
+
+                {/* Controlli VAN */}
+                <div className="absolute bottom-4 left-4 z-[999] flex flex-col gap-2 items-start max-w-[80%]">
+                  {geoMsg && (
+                    <div className="glass-card px-3 py-1.5 rounded-xl text-[11px] font-bold text-stone-700 shadow-lg">{geoMsg}</div>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleVanHere}
+                      disabled={vanBusy}
+                      className="h-11 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                    >
+                      <i className={`fa-solid ${vanBusy ? 'fa-spinner animate-spin' : 'fa-van-shuttle'}`}></i> Aggiorna van
+                    </button>
+                    <button
+                      onClick={toggleFollow}
+                      className={`h-11 px-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all border ${vanFollow ? 'bg-stone-900 text-white border-stone-900' : 'glass-card text-stone-700 border-white/60'}`}
+                    >
+                      <i className={`fa-solid fa-location-crosshairs ${vanFollow ? 'animate-pulse' : ''}`}></i> {vanFollow ? 'Segui ON' : 'Segui'}
+                    </button>
+                  </div>
+                  {vanPos && (
+                    <div className="glass-card px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-stone-500 shadow flex items-center gap-1.5">
+                      <i className="fa-solid fa-van-shuttle text-[#0057FF]"></i> Van: {vanAgo(vanPos.updated_at)}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -715,6 +960,19 @@
                                 </>
                               )
                            })()}
+                        </div>
+                      )}
+
+                      {selectedPinInfo.isVan && (
+                        <div className="flex flex-col items-center text-center py-8">
+                          <div className="w-24 h-24 rounded-[2rem] bg-[#0057FF]/10 border-2 border-white flex items-center justify-center mb-6 shadow-xl">
+                            <i className="fa-solid fa-van-shuttle text-4xl text-[#0057FF]"></i>
+                          </div>
+                          <h3 className="text-3xl font-black text-stone-900 mb-2 tracking-tighter">Il nostro Van</h3>
+                          <p className="text-stone-400 font-bold mb-6">Aggiornato {vanAgo(selectedPinInfo.updated_at)}</p>
+                          <div className="flex items-center gap-2 text-stone-600 font-black text-[11px] uppercase tracking-widest bg-white/50 px-6 py-3 rounded-full border border-stone-100">
+                            <i className="fa-solid fa-location-dot text-[#0057FF]"></i> {selectedPinInfo.lat.toFixed(4)}, {selectedPinInfo.lng.toFixed(4)}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1270,7 +1528,7 @@
           };
 
           return (
-            <div className="min-h-screen pb-32 md:pb-8">
+            <div className="min-h-screen pb-[calc(9rem+env(safe-area-inset-bottom))] md:pb-8">
 
               {/* Header Desktop */}
               <nav className="hidden md:block sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-white/20 px-8 py-4">
@@ -1324,13 +1582,16 @@
               {/* Floating Action Button Mobile */}
               <button
                 onClick={() => setActiveTab(activeTab === 'add' ? 'timeline' : 'add')}
-                className={`md:hidden fixed bottom-24 right-6 z-[60] w-16 h-16 rounded-[1.8rem] shadow-[0_15px_30px_-5px_rgba(5,150,105,0.4)] flex items-center justify-center transition-all active:scale-90 ${activeTab === 'add' ? 'bg-stone-800 rotate-45' : 'bg-emerald-600'}`}
+                style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom))' }}
+                className={`md:hidden fixed right-5 z-[60] w-16 h-16 rounded-[1.8rem] shadow-[0_15px_30px_-5px_rgba(0,87,255,0.4)] flex items-center justify-center transition-all active:scale-90 ${activeTab === 'add' ? 'bg-stone-800 rotate-45' : 'bg-emerald-600'}`}
               >
-                <i className={`fa-solid ${activeTab === 'add' ? 'fa-plus' : 'fa-plus'} text-white text-2xl`}></i>
+                <i className="fa-solid fa-plus text-white text-2xl"></i>
               </button>
 
               {/* Mobile Navbar: Floating Pill */}
-              <nav className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md h-20 bg-white/80 backdrop-blur-2xl rounded-full border border-white/60 shadow-2xl shadow-stone-300/40 px-3 flex items-center justify-around">
+              <nav
+                style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+                className="md:hidden fixed left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-md h-20 bg-white/80 backdrop-blur-2xl rounded-full border border-white/60 shadow-2xl shadow-stone-300/40 px-3 flex items-center justify-around">
                   {[
                     { id: 'timeline', icon: 'list-ul', label: 'Diario' },
                     { id: 'map', icon: 'map-location-dot', label: 'Mappa' },
@@ -1351,7 +1612,7 @@
               </nav>
 
               {/* Mobile Top Header */}
-              <div className="md:hidden pt-8 pb-4 px-6 flex items-center justify-between bg-transparent">
+              <div className="md:hidden safe-top pt-5 pb-4 px-5 flex items-center justify-between bg-transparent">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-600/20">
                       <i className="fa-solid fa-location-arrow text-white"></i>
@@ -1361,7 +1622,7 @@
                   <button
                     onClick={() => { localStorage.removeItem(AUTH_KEY); setAuthed(false); }}
                     title="Esci"
-                    className="w-10 h-10 rounded-xl bg-stone-100/80 backdrop-blur border border-white flex items-center justify-center text-stone-400 active:scale-95 transition-all"
+                    className="w-11 h-11 rounded-xl bg-stone-100/80 backdrop-blur border border-white flex items-center justify-center text-stone-400 active:scale-90 transition-all"
                   >
                     <i className="fa-solid fa-arrow-right-from-bracket"></i>
                   </button>
