@@ -1,6 +1,6 @@
 {
-  "name": "Shaka: Catania - Potenza",
-  "short_name": "Shaka",
+  "name": "il roadiario: Catania - Potenza",
+  "short_name": "roadiario",
   "description": "Il diario di bordo del nostro viaggio in van.",
   "start_url": "./index.html",
   "scope": "./",

@@ -10,6 +10,8 @@ const PRECACHE = [
   './index.html',
   './manifest.webmanifest',
   './icon.svg',
+  './roadiario.svg',
+  './roadiario-mark.svg',
   './questions.js',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',

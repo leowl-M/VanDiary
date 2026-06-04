@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Shaka · Catania - Potenza</title>
+    <title>il roadiario · Catania - Potenza</title>
 
     <!-- PWA -->
     <link rel="manifest" href="./manifest.webmanifest">
@@ -12,7 +12,7 @@
     <link rel="icon" href="./icon.svg" type="image/svg+xml">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Shaka">
+    <meta name="apple-mobile-web-app-title" content="il roadiario">
 
     <!-- Inter (font) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,21 +32,21 @@
               sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif']
             },
             colors: {
-              // Accento primario -> blu Wave #0057FF
+              // Accento primario -> royal blue (mood cartello) #3D5AFE
               emerald: {
-                50: '#EAF1FF', 100: '#D6E4FF', 200: '#ADC8FF', 300: '#7AA5FF',
-                400: '#3D7BFF', 500: '#1A66FF', 600: '#0057FF', 700: '#0046CC',
-                800: '#00379E', 900: '#002A78'
+                50: '#EDF0FF', 100: '#DCE2FF', 200: '#BCC6FF', 300: '#94A3FF',
+                400: '#6E80FF', 500: '#4E63FF', 600: '#3D5AFE', 700: '#2C42D6',
+                800: '#2133A8', 900: '#1B2A82'
               },
-              // Neutri caldi -> cream / sand / ink Wave
+              // Neutri caldi -> cream / sand / ink
               stone: {
                 50: '#FAF7EB', 100: '#F1ECDD', 200: '#CDC3BA', 300: '#B9AEA3',
                 400: '#9C9187', 500: '#6F665E', 600: '#514A44', 700: '#3C3733',
-                800: '#323232', 900: '#262524'
+                800: '#282828', 900: '#1d1d1d'
               },
               wave: {
-                blue: '#0057FF', yellow: '#FFD400', orange: '#F97D16',
-                sand: '#CDC3BA', cream: '#FAF7EB', ink: '#323232'
+                blue: '#3D5AFE', yellow: '#edff00', green: '#2a916c', navy: '#1b4736',
+                sand: '#CDC3BA', cream: '#FAF7EB', ink: '#282828'
               }
             }
           }
@@ -137,12 +137,16 @@
         /* Evita zoom/scatti sui tap dei controlli Leaflet e migliora il rendering mappa */
         .leaflet-container { -webkit-tap-highlight-color: transparent; }
 
+        /* ===== Mood cartello stradale ===== */
+        /* Banner a freccia direzionale (come il logo). pr extra per non tagliare il testo. */
+        .sign-arrow { clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%); }
+
         /* ===== Marker VAN sulla mappa ===== */
         .van-marker { position: relative; }
         .van-dot {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             width: 34px; height: 34px; border-radius: 50%;
-            background: #0057FF; color: #fff; border: 3px solid #fff;
+            background: #3D5AFE; color: #fff; border: 3px solid #fff;
             box-shadow: 0 4px 12px rgba(0,87,255,0.45);
             display: flex; align-items: center; justify-content: center; font-size: 15px;
         }
@@ -233,10 +237,7 @@
               
               {/* Header */}
               <div className="text-center mb-10 relative z-10">
-                <div className="bg-emerald-600 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-emerald-600/20 animate-float">
-                  <span className="text-3xl leading-none">🤙</span>
-                </div>
-                <h1 className="text-4xl font-black text-white tracking-tighter mb-2">Shaka</h1>
+                <img src="./roadiario-mark.svg" alt="il roadiario" className="h-24 w-auto mx-auto mb-8 animate-float" />
                 <p className="text-stone-500 font-medium">Benvenuto. Digita il tuo codice.</p>
               </div>
 
@@ -302,6 +303,7 @@
           const [activeTab, setActiveTab] = useState('timeline');
           const [selectedPinInfo, setSelectedPinInfo] = useState(null);
           const [counterEvents, setCounterEvents] = useState([]);
+          const [reactions, setReactions] = useState([]);
           const [loading, setLoading] = useState(true);
           const [saving, setSaving] = useState(false);
           const [loadError, setLoadError] = useState(false);
@@ -443,6 +445,15 @@
             { key: 'banana', label: 'Banana', icon: 'lemon', color: 'text-lime-600', bg: 'bg-lime-100/50', border: 'border-lime-200/50', hex: '#65a30d' },
           ], []);
 
+          // Reazioni ai ricordi (come eventi rapidi)
+          const reactionConfig = useMemo(() => [
+            { key: 'cuore', icon: 'heart', color: 'text-red-500' },
+            { key: 'ridere', icon: 'face-laugh-beam', color: 'text-amber-500' },
+            { key: 'wow', icon: 'face-surprise', color: 'text-blue-500' },
+            { key: 'top', icon: 'fire', color: 'text-orange-500' },
+            { key: 'applausi', icon: 'hands-clapping', color: 'text-emerald-600' },
+          ], []);
+
           // --- CARICAMENTO DA SUPABASE ---
           const loadData = async () => {
             setLoading(true);
@@ -471,6 +482,32 @@
           // Posizione van all'avvio + stop del watch GPS allo smontaggio
           useEffect(() => { loadVanPos(); }, []);
           useEffect(() => () => { if (watchRef.current != null) navigator.geolocation.clearWatch(watchRef.current); }, []);
+
+          // Reazioni: caricamento separato (tabella opzionale, fallback localStorage)
+          const loadReactions = async () => {
+            try { const ls = JSON.parse(localStorage.getItem('vd_reactions') || 'null'); if (ls) setReactions(ls); } catch (e) {}
+            try {
+              const { data, error } = await sb.from('reactions').select('*');
+              if (!error && data) { setReactions(data); localStorage.setItem('vd_reactions', JSON.stringify(data)); }
+            } catch (e) { /* tabella assente: resta su localStorage */ }
+          };
+          useEffect(() => { loadReactions(); }, []);
+
+          const reactionCounts = useMemo(() => {
+            const m = {};
+            reactions.forEach(r => {
+              if (!m[r.memory_id]) m[r.memory_id] = {};
+              m[r.memory_id][r.key] = (m[r.memory_id][r.key] || 0) + 1;
+            });
+            return m;
+          }, [reactions]);
+
+          const addReaction = async (memoryId, key) => {
+            const ev = { id: Date.now().toString() + Math.random().toString(36).slice(2, 6), memory_id: memoryId, key, timestamp: new Date().toISOString() };
+            setReactions(prev => { const n = [...prev, ev]; try { localStorage.setItem('vd_reactions', JSON.stringify(n)); } catch (e) {} return n; });
+            try { const { error } = await sb.from('reactions').insert(ev); if (error) console.warn('Reazione non salvata sul cloud:', error); }
+            catch (e) { console.warn('Reazione errore:', e); }
+          };
 
           // Geocoding di recupero: i ricordi salvati col solo nome (senza GPS)
           // ottengono coordinate dal nome luogo quando apri la mappa.
@@ -512,6 +549,7 @@
           const [isLocating, setIsLocating] = useState(false);
           const [recording, setRecording] = useState(false);
           const [recordSecs, setRecordSecs] = useState(0);
+          const [uploadMsg, setUploadMsg] = useState('');
           const mediaRecorderRef = useRef(null);
           const audioChunksRef = useRef([]);
           const recordTimerRef = useRef(null);
@@ -736,22 +774,66 @@
             }
           };
 
+          // Ridimensiona/comprime le foto prima dell'upload: più leggere, upload
+          // affidabile, e ri-encoding in JPEG (risolve HEIC iPhone non visibili).
+          const compressImage = (file) => new Promise((resolve) => {
+            if (!file.type || !file.type.startsWith('image/')) { resolve(file); return; }
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+              URL.revokeObjectURL(url);
+              const max = 1920;
+              let w = img.width, h = img.height;
+              if (w > max || h > max) { const r = Math.min(max / w, max / h); w = Math.round(w * r); h = Math.round(h * r); }
+              const canvas = document.createElement('canvas');
+              canvas.width = w; canvas.height = h;
+              canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+              canvas.toBlob((blob) => {
+                if (!blob) { resolve(file); return; }
+                resolve(new File([blob], `foto-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+              }, 'image/jpeg', 0.85);
+            };
+            img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+            img.src = url;
+          });
+
+          // Upload con tentativi multipli (rete mobile instabile).
+          const uploadWithRetry = async (file, attempts = 3) => {
+            const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+            for (let i = 0; i < attempts; i++) {
+              const path = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+              try {
+                const { data, error } = await sb.storage.from('media').upload(path, file, { contentType: file.type, upsert: false });
+                if (!error && data) {
+                  const { data: urlData } = sb.storage.from('media').getPublicUrl(data.path);
+                  return urlData.publicUrl;
+                }
+                console.warn('Upload tentativo', i + 1, 'fallito:', error);
+              } catch (e) { console.warn('Upload errore:', e); }
+              await new Promise((r) => setTimeout(r, 800 * (i + 1)));
+            }
+            return null;
+          };
+
           const handleAddMemory = async (e) => {
             e.preventDefault();
             if (!title || !location || !date) return;
             setSaving(true);
+            setUploadMsg('');
 
             let mediaUrl = null;
 
             if (mediaFile) {
-              const ext = mediaFile.name.split('.').pop();
-              const path = `${Date.now()}.${ext}`;
-              const { data: uploadData, error: uploadError } = await sb.storage
-                .from('media')
-                .upload(path, mediaFile, { contentType: mediaFile.type });
-              if (!uploadError) {
-                const { data: urlData } = sb.storage.from('media').getPublicUrl(uploadData.path);
-                mediaUrl = urlData.publicUrl;
+              let toUpload = mediaFile;
+              if (mediaFile.type && mediaFile.type.startsWith('image/')) {
+                try { toUpload = await compressImage(mediaFile); } catch (e) {}
+              }
+              mediaUrl = await uploadWithRetry(toUpload);
+              if (!mediaUrl) {
+                // Non salvare un ricordo senza il suo media: meglio far riprovare.
+                setSaving(false);
+                setUploadMsg('Caricamento del media fallito (connessione?). Il ricordo NON è stato salvato: riprova.');
+                return;
               }
             }
 
@@ -850,6 +932,17 @@
               </div>
             );
           };
+
+          // Header di sezione a forma di cartello stradale (freccia direzionale).
+          const sectionHeader = (icon, title, subtitle, hex = '#3D5AFE', dark = false) => (
+            <div className="mb-6">
+              <div className={`sign-arrow inline-flex items-center gap-2.5 pl-4 pr-9 py-2.5 shadow-lg ${dark ? 'text-stone-900' : 'text-white'}`} style={{ backgroundColor: hex }}>
+                <i className={`fa-solid fa-${icon} text-lg`}></i>
+                <h2 className="text-xl md:text-2xl font-black tracking-tight uppercase leading-none">{title}</h2>
+              </div>
+              {subtitle && <p className="text-stone-500 font-bold text-sm mt-2.5 ml-1">{subtitle}</p>}
+            </div>
+          );
 
           const getTypeIcon = (type, className = "text-xl") => {
             switch (type) {
@@ -971,9 +1064,9 @@
                   bounds.push([m.lat, m.lng]);
                   const icon = window.L.divIcon({
                     className: 'custom-pin',
-                    html: `<div style="background-color: #F97D16; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 8px rgba(0,0,0,0.15); transition: transform 0.2s;"><div style="width: 8px; height: 8px; background: white; border-radius: 50%;"></div></div>`,
-                    iconSize: [24, 24],
-                    iconAnchor: [12, 12]
+                    html: `<div style="display:flex;align-items:center;background:#3D5AFE;border:2px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,0.25);width:32px;height:22px;border-radius:5px;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 50%,calc(100% - 8px) 100%,0 100%);"><span style="width:8px;height:8px;background:#fff;border-radius:50%;margin-left:6px;"></span></div>`,
+                    iconSize: [32, 22],
+                    iconAnchor: [11, 11]
                   });
                   const marker = window.L.marker([m.lat, m.lng], { icon }).addTo(mapInstance);
                   marker.on('click', () => setSelectedPinInfo({ isMemory: true, ...m }));
@@ -1057,7 +1150,7 @@
           if (loading) return (
             <div className="min-h-screen bg-stone-50 flex items-center justify-center">
               <div className="text-center">
-                <span className="text-5xl mb-6 block" style={{animation: 'pulse 1.5s ease-in-out infinite'}}>🤙</span>
+                <img src="./roadiario-mark.svg" alt="il roadiario" className="h-20 w-auto mx-auto mb-6 block" style={{animation: 'pulse 1.5s ease-in-out infinite'}} />
                 <p className="text-stone-500 font-bold text-lg tracking-tight">Preparando il viaggio...</p>
               </div>
             </div>
@@ -1067,15 +1160,7 @@
 
           const renderMapView = () => (
             <div className="max-w-4xl mx-auto py-6 md:py-8 space-y-6 px-4">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 bg-white/80 backdrop-blur rounded-3xl flex items-center justify-center shadow-sm border border-white/60">
-                   <i className="fa-solid fa-route text-2xl text-[#F97D16]"></i>
-                </div>
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tighter leading-none">Mappa</h2>
-                  <p className="text-stone-500 font-bold text-sm">Le tappe del nostro tour</p>
-                </div>
-              </div>
+              {sectionHeader('route', 'Mappa', 'Le tappe del nostro tour', '#2a916c')}
 
               <div className="rounded-3xl shadow-2xl shadow-stone-200/50 border border-white/60 overflow-hidden relative">
                 <div ref={mapRef} className="w-full h-[70dvh] z-0"></div>
@@ -1092,10 +1177,10 @@
                     <div className="glass-card px-4 py-3 rounded-2xl shadow-lg flex flex-col gap-2 max-h-[40vh] overflow-y-auto no-scrollbar">
                      <div className="flex items-center gap-2 mb-1 border-b border-stone-200/30 pb-1 text-[11px] font-black uppercase text-stone-400 tracking-wider">Legenda</div>
                      <div className="flex items-center gap-3 text-xs font-bold text-stone-700">
-                        <div className="w-3.5 h-3.5 rounded-full bg-[#0057FF] border-2 border-white shadow-sm flex items-center justify-center"><i className="fa-solid fa-van-shuttle text-white" style={{fontSize:'6px'}}></i></div> Van
+                        <div className="w-3.5 h-3.5 rounded-full bg-[#3D5AFE] border-2 border-white shadow-sm flex items-center justify-center"><i className="fa-solid fa-van-shuttle text-white" style={{fontSize:'6px'}}></i></div> Van
                      </div>
                      <div className="flex items-center gap-3 text-xs font-bold text-stone-700">
-                        <div className="w-3.5 h-3.5 rounded-full bg-[#F97D16] border-2 border-white shadow-sm"></div> Tappe
+                        <div className="w-4 h-3 bg-[#3D5AFE] border-2 border-white shadow-sm" style={{clipPath:'polygon(0 0,calc(100% - 4px) 0,100% 50%,calc(100% - 4px) 100%,0 100%)'}}></div> Tappe
                      </div>
                      {counterConfig.map(conf => (
                        <div key={conf.key} className="flex items-center gap-3 text-xs font-bold text-stone-700">
@@ -1130,7 +1215,7 @@
                   <div className="flex items-center justify-between gap-2 px-1">
                     {vanPos ? (
                       <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-stone-500">
-                        <i className="fa-solid fa-van-shuttle text-[#0057FF]"></i> Van: {vanAgo(vanPos.updated_at)}
+                        <i className="fa-solid fa-van-shuttle text-[#3D5AFE]"></i> Van: {vanAgo(vanPos.updated_at)}
                       </span>
                     ) : <span></span>}
                     {geoMsg && <span className="text-[11px] font-bold text-stone-600 text-right truncate">{geoMsg}</span>}
@@ -1168,6 +1253,18 @@
                                 <p className="text-stone-600 leading-relaxed italic">"{selectedPinInfo.text}"</p>
                             </div>
                           )}
+                          <div className="flex flex-wrap gap-2 mt-5">
+                            {reactionConfig.map(rc => {
+                              const n = (reactionCounts[selectedPinInfo.id] || {})[rc.key] || 0;
+                              return (
+                                <button key={rc.key} type="button" onClick={() => addReaction(selectedPinInfo.id, rc.key)}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-black transition-all active:scale-90 ${n > 0 ? 'bg-stone-50 border-stone-200' : 'bg-white/40 border-stone-100 hover:bg-stone-50'}`}>
+                                  <i className={`fa-solid fa-${rc.icon} ${rc.color}`}></i>
+                                  {n > 0 && <span className="text-stone-700 tabular-nums">{n}</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
 
@@ -1200,13 +1297,13 @@
 
                       {selectedPinInfo.isVan && (
                         <div className="flex flex-col items-center text-center py-8">
-                          <div className="w-24 h-24 rounded-3xl bg-[#0057FF]/10 border-2 border-white flex items-center justify-center mb-6 shadow-xl">
-                            <i className="fa-solid fa-van-shuttle text-4xl text-[#0057FF]"></i>
+                          <div className="w-24 h-24 rounded-3xl bg-[#3D5AFE]/10 border-2 border-white flex items-center justify-center mb-6 shadow-xl">
+                            <i className="fa-solid fa-van-shuttle text-4xl text-[#3D5AFE]"></i>
                           </div>
                           <h3 className="text-3xl font-black text-stone-900 mb-2 tracking-tighter">Il nostro Van</h3>
                           <p className="text-stone-400 font-bold mb-6">Aggiornato {vanAgo(selectedPinInfo.updated_at)}</p>
                           <div className="flex items-center gap-2 text-stone-600 font-black text-[11px] uppercase tracking-widest bg-white/50 px-6 py-3 rounded-full border border-stone-100">
-                            <i className="fa-solid fa-location-dot text-[#0057FF]"></i> {selectedPinInfo.lat.toFixed(4)}, {selectedPinInfo.lng.toFixed(4)}
+                            <i className="fa-solid fa-location-dot text-[#3D5AFE]"></i> {selectedPinInfo.lat.toFixed(4)}, {selectedPinInfo.lng.toFixed(4)}
                           </div>
                         </div>
                       )}
@@ -1219,15 +1316,7 @@
 
           const renderCountersView = () => (
             <div className="max-w-4xl mx-auto py-6 md:py-8 space-y-6 px-4">
-              <div className="flex items-center gap-4 mb-8">
-                <div className="w-14 h-14 bg-rose-100/50 backdrop-blur rounded-3xl flex items-center justify-center shadow-sm border border-white/60">
-                  <i className="fa-solid fa-hashtag text-2xl text-rose-600"></i>
-                </div>
-                <div>
-                   <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tighter leading-none">Quick Counter</h2>
-                   <p className="text-stone-500 font-bold text-sm">Registra quello che succede in van</p>
-                </div>
-              </div>
+              {sectionHeader('hashtag', 'Quick Counter', 'Registra quello che succede in van', '#edff00', true)}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
                 {counterConfig.map(conf => (
                   <div key={conf.key} className="glass-card p-5 md:p-6 rounded-3xl border-white/60 shadow-xl shadow-stone-200/30 flex flex-col items-center group relative overflow-hidden">
@@ -1254,12 +1343,7 @@
           const renderAddView = () => (
             <div className="max-w-2xl mx-auto py-6 md:py-8 px-4">
               <div className="glass-card p-6 md:p-10 rounded-3xl shadow-2xl shadow-stone-200/50 border-white/60">
-                <header className="flex items-center gap-4 mb-8">
-                   <div className="w-12 h-12 bg-emerald-100/50 rounded-2xl flex items-center justify-center">
-                     <i className="fa-solid fa-plus text-xl"></i>
-                   </div>
-                   <h2 className="text-2xl font-black text-stone-900 tracking-tighter">Nuova Tappa</h2>
-                </header>
+                <header>{sectionHeader('plus', 'Nuova Tappa', null, '#3D5AFE')}</header>
 
                 <div className="flex gap-2 mb-8 bg-stone-100/50 p-1.5 rounded-2xl">
                   {['photo', 'video', 'audio', 'text'].map((type) => (
@@ -1362,8 +1446,13 @@
                     <textarea value={text} onChange={e => setText(e.target.value)} rows={4} placeholder="Cosa ricorderai di questo momento?" className="w-full p-4 bg-white/50 border border-stone-100 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none resize-none transition-all font-medium"></textarea>
                   </div>
 
+                  {uploadMsg && (
+                    <div className="bg-red-50 border border-red-200 text-red-600 rounded-2xl p-4 text-sm font-bold flex items-start gap-2">
+                      <i className="fa-solid fa-triangle-exclamation mt-0.5"></i> {uploadMsg}
+                    </div>
+                  )}
                   <button type="submit" disabled={saving} className="w-full h-16 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-3xl font-black text-lg transition-all shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-3 active:scale-95">
-                    {saving ? <i className="fa-solid fa-spinner animate-spin"></i> : <><i className="fa-solid fa-cloud-arrow-up"></i> SALVA TAPPA</>}
+                    {saving ? <><i className="fa-solid fa-spinner animate-spin"></i> Caricamento…</> : <><i className="fa-solid fa-cloud-arrow-up"></i> SALVA TAPPA</>}
                   </button>
                 </form>
               </div>
@@ -1372,15 +1461,7 @@
 
           const renderTimelineView = () => (
             <div className="max-w-3xl mx-auto py-6 md:py-8 px-4">
-              <div className="flex items-center gap-4 mb-10">
-                <div className="w-14 h-14 bg-emerald-100/50 backdrop-blur rounded-3xl flex items-center justify-center shadow-sm border border-white/60">
-                  <i className="fa-solid fa-location-arrow text-2xl text-emerald-600"></i>
-                </div>
-                <div>
-                  <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tighter leading-none">Il Diario</h2>
-                  <p className="text-stone-500 font-bold text-sm uppercase tracking-widest">Catania &rarr; Potenza</p>
-                </div>
-              </div>
+              {sectionHeader('location-arrow', 'Il Diario', 'Catania → Potenza', '#3D5AFE')}
 
               <div className="relative space-y-8">
                 {memories.length === 0 ? (
@@ -1422,7 +1503,21 @@
                               <p className="text-stone-600 leading-relaxed font-medium italic">"{memory.text}"</p>
                            </div>
                         )}
-                        
+
+                        {/* Reazioni */}
+                        <div className="flex flex-wrap gap-2 mt-5">
+                          {reactionConfig.map(rc => {
+                            const n = (reactionCounts[memory.id] || {})[rc.key] || 0;
+                            return (
+                              <button key={rc.key} type="button" onClick={() => addReaction(memory.id, rc.key)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-black transition-all active:scale-90 ${n > 0 ? 'bg-stone-50 border-stone-200' : 'bg-white/40 border-stone-100 hover:bg-stone-50'}`}>
+                                <i className={`fa-solid fa-${rc.icon} ${rc.color}`}></i>
+                                {n > 0 && <span className="text-stone-700 tabular-nums">{n}</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+
                         <div className="absolute top-8 -right-3 md:-right-4 w-10 h-10 bg-white shadow-lg rounded-2xl flex items-center justify-center text-emerald-500 border border-stone-100 scale-90 md:scale-100 transition-all transform opacity-100 translate-x-0 md:opacity-0 md:translate-x-4 md:group-hover:opacity-100 md:group-hover:translate-x-0">
                            {getTypeIcon(memory.type, 'text-lg')}
                         </div>
@@ -1442,7 +1537,7 @@
               .sort((a, b) => b.n - a.n);
             const topEvent = eventsRanked[0];
             const mediaTypes = [
-              { key: 'photo', label: 'Foto', icon: 'image', hex: '#0057FF' },
+              { key: 'photo', label: 'Foto', icon: 'image', hex: '#3D5AFE' },
               { key: 'video', label: 'Video', icon: 'video', hex: '#F97D16' },
               { key: 'audio', label: 'Audio', icon: 'microphone', hex: '#9333ea' },
               { key: 'text', label: 'Testo', icon: 'font', hex: '#d97706' },
@@ -1450,20 +1545,12 @@
 
             return (
             <div className="max-w-4xl mx-auto py-6 md:py-8 space-y-6 px-4">
-              <div className="flex items-center gap-4 mb-2">
-                <div className="w-14 h-14 bg-blue-100/50 backdrop-blur rounded-3xl flex items-center justify-center shadow-sm border border-white/60">
-                  <i className="fa-solid fa-chart-simple text-2xl text-blue-600"></i>
-                </div>
-                <div>
-                   <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tighter leading-none">Data Hub</h2>
-                   <p className="text-stone-500 font-bold text-sm">Tutti i numeri del tour</p>
-                </div>
-              </div>
+              {sectionHeader('chart-simple', 'Data Hub', 'Tutti i numeri del tour', '#3D5AFE')}
 
               {/* Hero stat grid */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                 {[
-                  { label: 'Ricordi', value: stats.total, icon: 'images', color: '#0057FF' },
+                  { label: 'Ricordi', value: stats.total, icon: 'images', color: '#3D5AFE' },
                   { label: 'Città', value: stats.locations, icon: 'location-dot', color: '#F97D16' },
                   { label: 'Giorni', value: stats.tripDays, icon: 'calendar-day', color: '#16a34a' },
                   { label: 'Eventi', value: totalEvents, icon: 'hashtag', color: '#dc2626' },
@@ -1508,7 +1595,7 @@
                     {stats.dateActivity.map(d => (
                       <div key={d.key} className="flex-1 min-w-[28px] flex flex-col items-center justify-end gap-2 h-full">
                         <span className="text-[10px] font-black text-stone-500 tabular-nums">{d.count}</span>
-                        <div className="w-full rounded-t-lg transition-all" style={{ height: `${(d.count / stats.maxActivity) * 100}%`, backgroundColor: d.count === stats.maxActivity ? '#0057FF' : '#CDC3BA' }}></div>
+                        <div className="w-full rounded-t-lg transition-all" style={{ height: `${(d.count / stats.maxActivity) * 100}%`, backgroundColor: d.count === stats.maxActivity ? '#3D5AFE' : '#CDC3BA' }}></div>
                         <span className="text-[8px] font-black text-stone-400 uppercase tracking-wide whitespace-nowrap">{d.date}</span>
                       </div>
                     ))}
@@ -1545,7 +1632,7 @@
                     <div className="relative w-24 h-24 flex-none">
                       <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
                         <circle cx="18" cy="18" r="15.9" fill="none" stroke="#F1ECDD" strokeWidth="4" />
-                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#0057FF" strokeWidth="4" strokeDasharray={`${stats.gpsPct} ${100 - stats.gpsPct}`} strokeLinecap="round" />
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#3D5AFE" strokeWidth="4" strokeDasharray={`${stats.gpsPct} ${100 - stats.gpsPct}`} strokeLinecap="round" />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center font-black text-stone-900 text-xl tabular-nums">{stats.gpsPct}%</div>
                     </div>
@@ -1612,15 +1699,7 @@
 
             return (
               <div className="max-w-2xl mx-auto py-6 md:py-8 space-y-6 px-4">
-                <div className="flex items-center gap-4 mb-2">
-                  <div className="w-14 h-14 bg-fuchsia-100/50 backdrop-blur rounded-3xl flex items-center justify-center shadow-sm border border-white/60">
-                    <i className="fa-solid fa-dice text-2xl text-fuchsia-600"></i>
-                  </div>
-                  <div>
-                    <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tighter leading-none">Il Gioco</h2>
-                    <p className="text-stone-500 font-bold text-sm">{subtitle}</p>
-                  </div>
-                </div>
+                {sectionHeader('dice', 'Il Gioco', subtitle, '#1b4736')}
 
                 {/* Selettore modalità */}
                 <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 pb-1">
@@ -1668,8 +1747,8 @@
                 {gameMode === 'mostlikely' && (
                   <>
                     <div className={cardCls}>
-                      <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: '#0057FF' }}></div>
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: '#0057FF22', color: '#0057FF' }}>
+                      <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: '#3D5AFE' }}></div>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: '#3D5AFE22', color: '#3D5AFE' }}>
                         <i className="fa-solid fa-hand-point-right"></i> Chi è più probabile
                       </span>
                       <p className="text-2xl md:text-3xl font-black text-stone-900 tracking-tight leading-snug relative z-10">
@@ -1716,8 +1795,8 @@
                 {gameMode === 'spinner' && (
                   <>
                     <div className={cardCls}>
-                      <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: '#0057FF' }}></div>
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: '#0057FF22', color: '#0057FF' }}>
+                      <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: '#3D5AFE' }}></div>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: '#3D5AFE22', color: '#3D5AFE' }}>
                         <i className="fa-solid fa-arrows-spin"></i> Tocca a…
                       </span>
                       <p className={`text-5xl md:text-6xl font-black text-stone-900 tracking-tighter relative z-10 transition-all ${spinning ? 'opacity-60 scale-95' : 'opacity-100 scale-100'}`}>
@@ -1936,13 +2015,7 @@
               <nav className="hidden md:block sticky top-0 z-50 bg-white/70 backdrop-blur-xl border-b border-white/20 px-8 py-4">
                 <div className="max-w-6xl mx-auto flex justify-between items-center">
                   <div className="flex items-center gap-4">
-                    <div className="bg-emerald-600 w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-600/20">
-                      <span className="text-2xl leading-none">🤙</span>
-                    </div>
-                    <div>
-                      <h1 className="text-2xl font-black tracking-tighter text-stone-900 leading-none">Shaka</h1>
-                      <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Catania &bull; Potenza</span>
-                    </div>
+                    <img src="./roadiario-mark.svg" alt="il roadiario" className="h-14 w-auto" />
                   </div>
 
                   <div className="flex items-center gap-3">
@@ -1966,7 +2039,7 @@
                     </div>
                     <button
                       onClick={() => setActiveTab('add')}
-                      className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-600/20 ${activeTab === 'add' ? 'bg-stone-800 text-white' : 'bg-emerald-600 text-white hover:bg-emerald-500'}`}
+                      className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg ${activeTab === 'add' ? 'bg-stone-900 text-white' : 'bg-[#edff00] text-stone-900 hover:brightness-95'}`}
                     >
                       <i className="fa-solid fa-plus"></i> Nuova
                     </button>
@@ -1985,9 +2058,9 @@
               <button
                 onClick={() => setActiveTab(activeTab === 'add' ? 'timeline' : 'add')}
                 style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom))' }}
-                className={`md:hidden fixed right-5 z-[60] w-16 h-16 rounded-3xl shadow-[0_15px_30px_-5px_rgba(0,87,255,0.4)] flex items-center justify-center transition-all active:scale-90 ${activeTab === 'add' ? 'bg-stone-800 rotate-45' : 'bg-emerald-600'}`}
+                className={`md:hidden fixed right-5 z-[60] w-16 h-16 rounded-3xl shadow-[0_15px_30px_-5px_rgba(0,0,0,0.25)] flex items-center justify-center transition-all active:scale-90 ${activeTab === 'add' ? 'bg-stone-900 rotate-45 text-white' : 'bg-[#edff00] text-stone-900'}`}
               >
-                <i className="fa-solid fa-plus text-white text-2xl"></i>
+                <i className="fa-solid fa-plus text-2xl"></i>
               </button>
 
               {/* Mobile Navbar: Floating Pill */}
@@ -2016,10 +2089,7 @@
               {/* Mobile Top Header */}
               <div className="md:hidden safe-top pt-5 pb-4 px-5 flex items-center justify-between bg-transparent">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-600/20">
-                      <span className="text-lg leading-none">🤙</span>
-                    </div>
-                    <h1 className="text-xl font-black tracking-tighter text-stone-900">Shaka</h1>
+                    <img src="./roadiario-mark.svg" alt="il roadiario" className="h-12 w-auto" />
                   </div>
                   <button
                     onClick={() => { localStorage.removeItem(AUTH_KEY); setAuthed(false); }}
