@@ -431,6 +431,15 @@
             linkElement.click();
           };
 
+          const formatDate = (d, long = false) => {
+            if (!d) return '';
+            const dt = new Date(d);
+            if (isNaN(dt.getTime())) return d;
+            return dt.toLocaleDateString('it-IT', long
+              ? { day: 'numeric', month: 'long', year: 'numeric' }
+              : { day: '2-digit', month: 'short' });
+          };
+
           const getTypeIcon = (type, className = "text-xl") => {
             switch (type) {
               case 'photo': return <i className={`fa-solid fa-image ${className}`}></i>;
@@ -500,12 +509,30 @@
             memories.forEach(m => { dates[m.date] = (dates[m.date] || 0) + 1; });
             const sortedDates = Object.keys(dates).sort();
             const dateActivity = sortedDates.map(d => ({
+              key: d,
               date: new Date(d).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }),
               count: dates[d]
             }));
             const maxActivity = Math.max(...dateActivity.map(d => d.count), 1);
 
-            return { total, locations, types, typePercentages, dateActivity, maxActivity };
+            // Periodo / giorni di viaggio
+            const firstDate = sortedDates[0] || null;
+            const lastDate = sortedDates[sortedDates.length - 1] || null;
+            const tripDays = (firstDate && lastDate)
+              ? Math.round((new Date(lastDate) - new Date(firstDate)) / 86400000) + 1
+              : 0;
+
+            // Giorno più attivo
+            const busiest = dateActivity.reduce((a, b) => (b.count > (a ? a.count : 0) ? b : a), null);
+
+            // Copertura GPS
+            const withGps = memories.filter(m => m.lat && m.lng).length;
+            const gpsPct = total ? Math.round((withGps / total) * 100) : 0;
+
+            return {
+              total, locations, types, typePercentages, dateActivity, maxActivity,
+              firstDate, lastDate, tripDays, busiest, withGps, gpsPct
+            };
           }, [memories]);
 
           // --- MAPPA ---
@@ -889,9 +916,23 @@
             </div>
           );
 
-          const renderStatsView = () => (
-            <div className="max-w-4xl mx-auto py-6 md:py-8 space-y-8 px-4">
-              <div className="flex items-center gap-4 mb-4">
+          const renderStatsView = () => {
+            const totalEvents = counterEvents.length;
+            const eventsWithGps = counterEvents.filter(e => e.lat && e.lng).length;
+            const eventsRanked = counterConfig
+              .map(c => ({ ...c, n: counters[c.key] }))
+              .sort((a, b) => b.n - a.n);
+            const topEvent = eventsRanked[0];
+            const mediaTypes = [
+              { key: 'photo', label: 'Foto', icon: 'image', hex: '#0057FF' },
+              { key: 'video', label: 'Video', icon: 'video', hex: '#F97D16' },
+              { key: 'audio', label: 'Audio', icon: 'microphone', hex: '#9333ea' },
+              { key: 'text', label: 'Testo', icon: 'font', hex: '#d97706' },
+            ];
+
+            return (
+            <div className="max-w-4xl mx-auto py-6 md:py-8 space-y-6 px-4">
+              <div className="flex items-center gap-4 mb-2">
                 <div className="w-14 h-14 bg-blue-100/50 backdrop-blur rounded-[1.5rem] flex items-center justify-center shadow-sm border border-white/60">
                   <i className="fa-solid fa-chart-simple text-2xl text-blue-600"></i>
                 </div>
@@ -901,47 +942,142 @@
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="glass-card p-6 rounded-[2rem] border-white/60">
-                  <div className="text-stone-400 text-[10px] font-black uppercase tracking-widest mb-1">Ricordi</div>
-                  <div className="text-4xl font-black text-emerald-600">{stats.total}</div>
+              {/* Hero stat grid */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                {[
+                  { label: 'Ricordi', value: stats.total, icon: 'images', color: '#0057FF' },
+                  { label: 'Città', value: stats.locations, icon: 'location-dot', color: '#F97D16' },
+                  { label: 'Giorni', value: stats.tripDays, icon: 'calendar-day', color: '#16a34a' },
+                  { label: 'Eventi', value: totalEvents, icon: 'hashtag', color: '#dc2626' },
+                ].map(s => (
+                  <div key={s.label} className="glass-card p-5 rounded-[1.75rem] border-white/60 relative overflow-hidden">
+                    <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full blur-2xl opacity-20" style={{ backgroundColor: s.color }}></div>
+                    <i className={`fa-solid fa-${s.icon} text-sm mb-3 block`} style={{ color: s.color }}></i>
+                    <div className="text-4xl font-black tracking-tighter tabular-nums" style={{ color: s.color }}>{s.value}</div>
+                    <div className="text-stone-400 text-[10px] font-black uppercase tracking-widest mt-1">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Periodo */}
+              {stats.firstDate && (
+                <div className="glass-card p-5 rounded-[1.75rem] border-white/60 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-stone-100/60 flex items-center justify-center text-stone-500"><i className="fa-solid fa-flag-checkered"></i></div>
+                    <div>
+                      <div className="text-stone-400 text-[10px] font-black uppercase tracking-widest">Periodo</div>
+                      <div className="font-black text-stone-800 text-sm">{formatDate(stats.firstDate)} → {formatDate(stats.lastDate)}</div>
+                    </div>
+                  </div>
+                  {stats.busiest && (
+                    <div className="text-right">
+                      <div className="text-stone-400 text-[10px] font-black uppercase tracking-widest">Giorno top</div>
+                      <div className="font-black text-stone-800 text-sm">{stats.busiest.date} · {stats.busiest.count} ric.</div>
+                    </div>
+                  )}
                 </div>
-                <div className="glass-card p-6 rounded-[2rem] border-white/60">
-                  <div className="text-stone-400 text-[10px] font-black uppercase tracking-widest mb-1">Città</div>
-                  <div className="text-4xl font-black text-blue-600">{stats.locations}</div>
+              )}
+
+              {/* Grafico attività */}
+              <div className="glass-card p-6 md:p-8 rounded-[2rem] border-white/60">
+                <h3 className="font-black text-stone-900 text-lg mb-6 flex items-center gap-2 tracking-tighter">
+                  <i className="fa-solid fa-chart-column text-blue-600"></i> Attività nel tempo
+                </h3>
+                {stats.dateActivity.length === 0 ? (
+                  <p className="text-stone-400 font-bold text-sm">Ancora nessun dato.</p>
+                ) : (
+                  <div className="flex items-end gap-1.5 h-44 overflow-x-auto no-scrollbar">
+                    {stats.dateActivity.map(d => (
+                      <div key={d.key} className="flex-1 min-w-[28px] flex flex-col items-center justify-end gap-2 h-full">
+                        <span className="text-[10px] font-black text-stone-500 tabular-nums">{d.count}</span>
+                        <div className="w-full rounded-t-lg transition-all" style={{ height: `${(d.count / stats.maxActivity) * 100}%`, backgroundColor: d.count === stats.maxActivity ? '#0057FF' : '#CDC3BA' }}></div>
+                        <span className="text-[8px] font-black text-stone-400 uppercase tracking-wide whitespace-nowrap">{d.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Mix media + GPS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="glass-card p-6 md:p-8 rounded-[2rem] border-white/60">
+                  <h3 className="font-black text-stone-900 text-lg mb-6 flex items-center gap-2 tracking-tighter">
+                    <i className="fa-solid fa-photo-film text-orange-500"></i> Tipo di contenuto
+                  </h3>
+                  <div className="space-y-4">
+                    {mediaTypes.map(mt => (
+                      <div key={mt.key}>
+                        <div className="flex justify-between items-center text-xs font-black mb-1.5">
+                          <span className="flex items-center gap-2 text-stone-600 uppercase tracking-wider"><i className={`fa-solid fa-${mt.icon}`} style={{ color: mt.hex }}></i> {mt.label}</span>
+                          <span className="text-stone-900 tabular-nums">{stats.types[mt.key]} · {Math.round(stats.typePercentages[mt.key])}%</span>
+                        </div>
+                        <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{ width: `${stats.typePercentages[mt.key]}%`, backgroundColor: mt.hex }}></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="glass-card p-6 rounded-[2rem] border-white/60 col-span-2 flex flex-col justify-center">
-                  <div className="text-stone-400 text-[10px] font-black uppercase tracking-widest mb-3">Mix Media</div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col items-center"><i className="fa-solid fa-image text-emerald-500 mb-1"></i> <span className="font-black text-sm">{stats.types.photo}</span></div>
-                    <div className="flex flex-col items-center"><i className="fa-solid fa-video text-blue-500 mb-1"></i> <span className="font-black text-sm">{stats.types.video}</span></div>
-                    <div className="flex flex-col items-center"><i className="fa-solid fa-microphone text-purple-500 mb-1"></i> <span className="font-black text-sm">{stats.types.audio}</span></div>
-                    <div className="flex flex-col items-center"><i className="fa-solid fa-font text-orange-500 mb-1"></i> <span className="font-black text-sm">{stats.types.text}</span></div>
+
+                <div className="glass-card p-6 md:p-8 rounded-[2rem] border-white/60 flex flex-col">
+                  <h3 className="font-black text-stone-900 text-lg mb-6 flex items-center gap-2 tracking-tighter">
+                    <i className="fa-solid fa-map-location-dot text-blue-600"></i> Geolocalizzazione
+                  </h3>
+                  <div className="flex items-center gap-6 flex-1">
+                    <div className="relative w-24 h-24 flex-none">
+                      <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#F1ECDD" strokeWidth="4" />
+                        <circle cx="18" cy="18" r="15.9" fill="none" stroke="#0057FF" strokeWidth="4" strokeDasharray={`${stats.gpsPct} ${100 - stats.gpsPct}`} strokeLinecap="round" />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center font-black text-stone-900 text-xl tabular-nums">{stats.gpsPct}%</div>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="font-black text-stone-800">{stats.withGps} <span className="text-stone-400 font-bold">/ {stats.total} ricordi</span></div>
+                      <div className="text-stone-500 font-bold text-xs">{eventsWithGps} eventi geolocalizzati</div>
+                      <div className="text-stone-400 font-bold text-[11px]">sulla mappa</div>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="glass-card p-8 rounded-[2.5rem] border-white/60 overflow-hidden relative">
+              {/* Eventi in classifica */}
+              <div className="glass-card p-6 md:p-8 rounded-[2.5rem] border-white/60 overflow-hidden relative">
                  <div className="absolute -top-6 -right-6 w-32 h-32 bg-rose-500/5 blur-2xl rounded-full"></div>
-                 <h3 className="font-black text-stone-900 text-lg mb-8 flex items-center gap-2 tracking-tighter">
-                   <i className="fa-solid fa-hashtag text-rose-500"></i> Eventi Top
-                 </h3>
-                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6">
-                   {counterConfig.map(conf => (
-                      <div key={conf.key} className="flex flex-col">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className={`w-8 h-8 rounded-lg ${conf.bg} flex items-center justify-center text-xs`}>
-                            <i className={`fa-solid fa-${conf.icon} ${conf.color}`}></i>
-                          </div>
-                          <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest truncate">{conf.label}</span>
-                        </div>
-                        <div className="text-3xl font-black text-stone-900 ml-1">{counters[conf.key]}</div>
-                      </div>
-                   ))}
+                 <div className="flex items-center justify-between mb-6">
+                   <h3 className="font-black text-stone-900 text-lg flex items-center gap-2 tracking-tighter">
+                     <i className="fa-solid fa-ranking-star text-rose-500"></i> Classifica eventi
+                   </h3>
+                   {topEvent && topEvent.n > 0 && (
+                     <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full" style={{ backgroundColor: topEvent.hex + '1a', color: topEvent.hex }}>
+                       Top: {topEvent.label}
+                     </span>
+                   )}
+                 </div>
+                 <div className="space-y-3.5">
+                   {eventsRanked.map(c => {
+                     const pct = topEvent && topEvent.n ? (c.n / topEvent.n) * 100 : 0;
+                     return (
+                       <div key={c.key} className="flex items-center gap-3">
+                         <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center flex-none`}>
+                           <i className={`fa-solid fa-${c.icon} ${c.color} text-sm`}></i>
+                         </div>
+                         <div className="flex-1 min-w-0">
+                           <div className="flex justify-between items-center text-xs font-black mb-1">
+                             <span className="text-stone-600 uppercase tracking-wider truncate">{c.label}</span>
+                             <span className="text-stone-900 tabular-nums ml-2">{c.n}</span>
+                           </div>
+                           <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+                             <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: c.hex }}></div>
+                           </div>
+                         </div>
+                       </div>
+                     );
+                   })}
                  </div>
               </div>
             </div>
-          );
+            );
+          };
 
           const renderGameView = () => {
             const meta = gameLevels.find(l => l.id === (currentQ ? currentQ.l : gameLevel)) || gameLevels[0];
@@ -1002,26 +1138,63 @@
             );
           };
 
-          const renderOutputView = () => (
+          const renderOutputView = () => {
+            const totalEvents = counterEvents.length;
+            return (
             <div id="album-print" className="min-h-screen bg-[#2B2A28] text-stone-100 px-6 py-8 sm:p-10 md:p-12 mx-4 md:mx-0 rounded-[2.5rem] md:rounded-[3rem] shadow-3xl relative overflow-hidden">
               {/* Decorative elements */}
               <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
                  <div className="absolute top-1/4 right-0 w-96 h-96 bg-emerald-600/30 blur-[150px] rounded-full"></div>
-                 <div className="absolute bottom-1/4 left-0 w-96 h-96 bg-blue-600/20 blur-[150px] rounded-full"></div>
+                 <div className="absolute bottom-1/4 left-0 w-96 h-96 bg-orange-500/20 blur-[150px] rounded-full"></div>
               </div>
 
               <div className="max-w-4xl mx-auto relative z-10">
-                <header className="text-center mb-16 pt-12">
-                  <span className="inline-block px-4 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em] mb-6">World Tour Experience</span>
-                  <h1 className="text-5xl md:text-7xl font-black text-white mb-8 tracking-tighter leading-[0.9]">Album di<br/>Bordo</h1>
-                  <div className="flex items-center justify-center gap-4 text-stone-400 text-sm font-bold">
-                    <span className="bg-white/5 px-4 py-2 rounded-2xl border border-white/5">Catania</span>
-                    <i className="fa-solid fa-arrow-right-long text-emerald-500/50"></i>
-                    <span className="bg-white/5 px-4 py-2 rounded-2xl border border-white/5">Potenza</span>
+                {/* COVER */}
+                <header className="text-center mb-16 pt-10 md:pt-16">
+                  <span className="inline-block px-4 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em] mb-6">Diario di viaggio</span>
+                  <h1 className="text-5xl md:text-7xl font-black text-white mb-6 tracking-tighter leading-[0.9]">Album di<br/>Bordo</h1>
+                  <div className="flex items-center justify-center gap-3 text-stone-300 text-sm font-bold mb-10">
+                    <span className="bg-white/5 px-4 py-2 rounded-2xl border border-white/10">Catania</span>
+                    <i className="fa-solid fa-arrow-right-long text-emerald-500/60"></i>
+                    <span className="bg-white/5 px-4 py-2 rounded-2xl border border-white/10">Potenza</span>
                   </div>
+                  {/* Meta cover */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto">
+                    {[
+                      { v: stats.total, l: 'Tappe' },
+                      { v: stats.locations, l: 'Città' },
+                      { v: stats.tripDays, l: 'Giorni' },
+                      { v: totalEvents, l: 'Eventi' },
+                    ].map(m => (
+                      <div key={m.l} className="bg-white/5 border border-white/10 rounded-2xl py-4">
+                        <div className="text-3xl font-black text-white tabular-nums">{m.v}</div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-stone-400 mt-0.5">{m.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {stats.firstDate && (
+                    <p className="text-stone-500 font-bold text-xs uppercase tracking-widest mt-6">{formatDate(stats.firstDate, true)} — {formatDate(stats.lastDate, true)}</p>
+                  )}
                 </header>
 
-                <div className="space-y-24 md:space-y-40 pb-20">
+                {/* INDICE */}
+                {memories.length > 1 && (
+                  <div className="mb-16 border-t border-white/10 pt-8">
+                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-500 mb-5">Indice</h3>
+                    <div className="space-y-1">
+                      {memories.map((m, i) => (
+                        <div key={m.id} className="flex items-baseline gap-4 py-2 border-b border-white/5">
+                          <span className="text-stone-600 font-black text-sm tabular-nums w-7">{String(i + 1).padStart(2, '0')}</span>
+                          <span className="text-white font-bold flex-1 truncate">{m.title}</span>
+                          <span className="text-stone-500 font-bold text-xs whitespace-nowrap">{formatDate(m.date)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* CAPITOLI */}
+                <div className="space-y-24 md:space-y-36 pb-16">
                   {memories.length === 0 && <p className="text-center text-stone-500 text-lg">Nessun capitolo ancora scritto.</p>}
                   {memories.map((memory, idx) => (
                     <article key={memory.id} className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-16 items-center">
@@ -1039,24 +1212,48 @@
                           </div>
                         ) : (
                           <div className="bg-white/5 border border-white/5 rounded-[2.5rem] h-48 md:h-64 flex items-center justify-center">
-                             <i className="fa-solid fa-quote-left text-5xl text-stone-800"></i>
+                             <i className="fa-solid fa-quote-left text-5xl text-stone-700"></i>
                           </div>
                         )}
                       </div>
                       <div className={`md:col-span-5 ${idx % 2 === 0 ? 'md:order-2' : 'md:order-1'}`}>
-                        <div className="inline-block px-3 py-1 bg-white/5 border border-white/10 text-stone-400 rounded-lg text-[10px] font-black uppercase tracking-widest mb-6">{memory.date}</div>
-                        <h2 className="text-3xl md:text-4xl font-black mb-4 text-white tracking-tighter leading-none">{memory.title}</h2>
-                        <div className="flex items-center gap-2 text-emerald-400 mb-8 font-bold text-sm">
-                          <i className="fa-solid fa-location-dot"></i> {memory.location}
+                        <div className="flex items-center gap-3 mb-5">
+                          <span className="text-5xl md:text-6xl font-black text-white/10 tracking-tighter tabular-nums leading-none">{String(idx + 1).padStart(2, '0')}</span>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/10 text-stone-300 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                            {getTypeIcon(memory.type, 'text-[10px]')} {formatDate(memory.date, true)}
+                          </span>
                         </div>
-                        {memory.text && <p className="text-stone-400 text-lg leading-relaxed font-medium">{memory.text}</p>}
+                        <h2 className="text-3xl md:text-4xl font-black mb-4 text-white tracking-tighter leading-none">{memory.title}</h2>
+                        <div className="flex items-center gap-2 text-emerald-400 mb-6 font-bold text-sm">
+                          <i className="fa-solid fa-location-dot"></i> {memory.location}
+                          {memory.lat && memory.lng && <i className="fa-solid fa-map-pin text-stone-600 text-xs" title="Geolocalizzato"></i>}
+                        </div>
+                        {memory.text && (
+                          <p className="text-stone-300 text-lg leading-relaxed font-medium border-l-2 border-emerald-500/40 pl-4">{memory.text}</p>
+                        )}
                       </div>
                     </article>
                   ))}
                 </div>
 
+                {/* RECAP + FOOTER */}
                 {memories.length > 0 && (
-                   <footer className="text-center pt-20 border-t border-white/5 pb-20">
+                   <footer className="pt-16 border-t border-white/10 pb-16">
+                      <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-500 mb-6 text-center">Il viaggio in numeri</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-12 max-w-3xl mx-auto">
+                        {[
+                          { v: stats.total, l: 'Ricordi', i: 'images' },
+                          { v: stats.locations, l: 'Città', i: 'location-dot' },
+                          { v: totalEvents, l: 'Eventi', i: 'hashtag' },
+                          { v: stats.gpsPct + '%', l: 'Su mappa', i: 'map-location-dot' },
+                        ].map(s => (
+                          <div key={s.l} className="bg-white/5 border border-white/10 rounded-2xl p-5 text-center">
+                            <i className={`fa-solid fa-${s.i} text-emerald-400 mb-2`}></i>
+                            <div className="text-2xl font-black text-white tabular-nums">{s.v}</div>
+                            <div className="text-[10px] font-black uppercase tracking-widest text-stone-400 mt-0.5">{s.l}</div>
+                          </div>
+                        ))}
+                      </div>
                       <div className="flex flex-col sm:flex-row items-center justify-center gap-4 print:hidden">
                         <button onClick={() => window.print()} className="w-full sm:w-auto h-16 px-10 bg-emerald-600 hover:bg-emerald-500 text-white rounded-[1.5rem] font-black text-lg transition-all shadow-xl shadow-emerald-900/40 flex items-center justify-center gap-3 active:scale-95">
                           <i className="fa-solid fa-file-pdf"></i> Salva PDF
@@ -1069,7 +1266,8 @@
                 )}
               </div>
             </div>
-          );
+            );
+          };
 
           return (
             <div className="min-h-screen pb-32 md:pb-8">
