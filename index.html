@@ -120,6 +120,23 @@
         /* Safe-area helpers (notch / home indicator) */
         .safe-top { padding-top: env(safe-area-inset-top, 0px); }
 
+        /* ===== Ottimizzazioni Safari / iOS ===== */
+        /* 100vh su iOS include la barra indirizzi -> scroll inutile. Usa dvh dove supportato. */
+        @supports (height: 100dvh) {
+            .min-h-screen { min-height: 100dvh; }
+        }
+        /* Niente scroll orizzontale da blur/elementi decorativi che sforano.
+           'clip' non crea uno scroll container, quindi non rompe position:sticky. */
+        html, body { overflow-x: clip; max-width: 100%; }
+        /* Safari: le utility backdrop-blur di Tailwind non aggiungono il prefisso webkit.
+           Senza, il "vetro" (nav, card, modali) appare opaco/rotto su iOS < 18. */
+        .backdrop-blur, .backdrop-blur-sm, .backdrop-blur-md, .backdrop-blur-lg,
+        .backdrop-blur-xl, .backdrop-blur-2xl, .backdrop-blur-3xl {
+            -webkit-backdrop-filter: var(--tw-backdrop-blur, blur(12px));
+        }
+        /* Evita zoom/scatti sui tap dei controlli Leaflet e migliora il rendering mappa */
+        .leaflet-container { -webkit-tap-highlight-color: transparent; }
+
         /* ===== Marker VAN sulla mappa ===== */
         .van-marker { position: relative; }
         .van-dot {
@@ -916,7 +933,7 @@
               </div>
 
               <div className="rounded-[2.5rem] shadow-2xl shadow-stone-200/50 border border-white/60 overflow-hidden relative">
-                <div ref={mapRef} className="w-full h-[70vh] z-0"></div>
+                <div ref={mapRef} className="w-full h-[70dvh] z-0"></div>
 
                 <div className="absolute top-4 right-4 z-[999] flex flex-col items-end gap-2">
                   <button
@@ -945,37 +962,40 @@
                   )}
                 </div>
 
-                {/* Controlli VAN */}
-                <div className="absolute bottom-4 left-4 z-[999] flex flex-col gap-2 items-start max-w-[80%]">
-                  {geoMsg && (
-                    <div className="glass-card px-3 py-1.5 rounded-xl text-[11px] font-bold text-stone-700 shadow-lg">{geoMsg}</div>
-                  )}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleVanHere}
-                      disabled={vanBusy}
-                      className="h-11 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 active:scale-95 transition-all"
-                    >
-                      <i className={`fa-solid ${vanBusy ? 'fa-spinner animate-spin' : 'fa-van-shuttle'}`}></i> Aggiorna van
-                    </button>
-                    <button
-                      onClick={toggleFollow}
-                      className={`h-11 px-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 active:scale-95 transition-all border ${vanFollow ? 'bg-stone-900 text-white border-stone-900' : 'glass-card text-stone-700 border-white/60'}`}
-                    >
-                      <i className={`fa-solid fa-location-crosshairs ${vanFollow ? 'animate-pulse' : ''}`}></i> {vanFollow ? 'Segui ON' : 'Segui'}
-                    </button>
-                  </div>
-                  {vanPos && (
-                    <div className="glass-card px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest text-stone-500 shadow flex items-center gap-1.5">
-                      <i className="fa-solid fa-van-shuttle text-[#0057FF]"></i> Van: {vanAgo(vanPos.updated_at)}
-                    </div>
-                  )}
+              </div>
+
+              {/* Controlli VAN — barra sotto la mappa, in flusso normale (niente overlap col menu) */}
+              <div className="glass-card rounded-[1.75rem] border-white/60 shadow-lg p-3 flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleVanHere}
+                    disabled={vanBusy}
+                    className="flex-1 h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-black text-xs uppercase tracking-widest shadow-md shadow-emerald-600/30 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                  >
+                    <i className={`fa-solid ${vanBusy ? 'fa-spinner animate-spin' : 'fa-van-shuttle'}`}></i> Aggiorna van
+                  </button>
+                  <button
+                    onClick={toggleFollow}
+                    className={`flex-1 h-12 rounded-2xl font-black text-xs uppercase tracking-widest shadow-md flex items-center justify-center gap-2 active:scale-95 transition-all border ${vanFollow ? 'bg-stone-900 text-white border-stone-900' : 'bg-white/60 text-stone-700 border-stone-200'}`}
+                  >
+                    <i className={`fa-solid fa-location-crosshairs ${vanFollow ? 'animate-pulse' : ''}`}></i> {vanFollow ? 'Segui ON' : 'Segui'}
+                  </button>
                 </div>
+                {(vanPos || geoMsg) && (
+                  <div className="flex items-center justify-between gap-2 px-1">
+                    {vanPos ? (
+                      <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-stone-500">
+                        <i className="fa-solid fa-van-shuttle text-[#0057FF]"></i> Van: {vanAgo(vanPos.updated_at)}
+                      </span>
+                    ) : <span></span>}
+                    {geoMsg && <span className="text-[11px] font-bold text-stone-600 text-right truncate">{geoMsg}</span>}
+                  </div>
+                )}
               </div>
 
               {selectedPinInfo && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm" onClick={() => setSelectedPinInfo(null)}>
-                  <div className="glass-card rounded-[2.5rem] w-full max-w-lg max-h-[85vh] flex flex-col relative shadow-2xl border-white/80" onClick={e => e.stopPropagation()}>
+                  <div className="glass-card rounded-[2.5rem] w-full max-w-lg max-h-[85dvh] flex flex-col relative shadow-2xl border-white/80" onClick={e => e.stopPropagation()}>
                     <div className="flex-none flex justify-between items-center p-5 border-b border-stone-100/50">
                       <span className="font-black text-stone-400 text-[11px] tracking-widest uppercase pl-2">Dettaglio</span>
                       <button onClick={() => setSelectedPinInfo(null)} className="w-10 h-10 bg-stone-100/50 text-stone-500 rounded-full flex items-center justify-center hover:bg-stone-200 transition-colors">
@@ -1529,8 +1549,8 @@
                           <div className="rounded-[2.5rem] overflow-hidden shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] border border-white/10 group">
                             {(() => {
                               const k = mediaKind(memory.mediaUrl, memory.type);
-                              if (k === 'photo') return <img src={memory.mediaUrl} loading="lazy" className="w-full h-[50vh] md:h-[70vh] object-cover transition-transform duration-1000 group-hover:scale-110" alt="Ricordo" />;
-                              if (k === 'video') return renderMedia(memory.mediaUrl, 'video', { videoClass: 'w-full h-[50vh] md:h-[70vh] object-contain bg-black', dark: true });
+                              if (k === 'photo') return <img src={memory.mediaUrl} loading="lazy" className="w-full h-[50dvh] md:h-[70dvh] object-cover transition-transform duration-1000 group-hover:scale-110" alt="Ricordo" />;
+                              if (k === 'video') return renderMedia(memory.mediaUrl, 'video', { videoClass: 'w-full h-[50dvh] md:h-[70dvh] object-contain bg-black', dark: true });
                               return (
                                 <div className="bg-white/5 py-8 px-6 flex flex-col items-center">
                                   <i className="fa-solid fa-microphone text-5xl text-emerald-500 mb-6"></i>
