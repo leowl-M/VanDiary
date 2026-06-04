@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>VanDiary: Catania - Potenza</title>
+    <title>Shaka · Catania - Potenza</title>
 
     <!-- PWA -->
     <link rel="manifest" href="./manifest.webmanifest">
@@ -12,7 +12,7 @@
     <link rel="icon" href="./icon.svg" type="image/svg+xml">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="VanDiary">
+    <meta name="apple-mobile-web-app-title" content="Shaka">
 
     <!-- Inter (font) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -233,10 +233,10 @@
               
               {/* Header */}
               <div className="text-center mb-10 relative z-10">
-                <div className="bg-emerald-600 w-16 h-16 rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-emerald-600/20 animate-float">
-                  <i className="fa-solid fa-location-arrow text-3xl text-white"></i>
+                <div className="bg-emerald-600 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-emerald-600/20 animate-float">
+                  <span className="text-3xl leading-none">🤙</span>
                 </div>
-                <h1 className="text-4xl font-black text-white tracking-tighter mb-2">VanDiary</h1>
+                <h1 className="text-4xl font-black text-white tracking-tighter mb-2">Shaka</h1>
                 <p className="text-stone-500 font-medium">Benvenuto. Digita il tuo codice.</p>
               </div>
 
@@ -308,6 +308,16 @@
           const [gameLevel, setGameLevel] = useState('tutte');
           const [currentQ, setCurrentQ] = useState(null);
           const [qSpin, setQSpin] = useState(false);
+          const [gameMode, setGameMode] = useState('preferiresti');
+          const [mlQ, setMlQ] = useState(null);
+          const [tdCard, setTdCard] = useState(null);
+          const [chCard, setChCard] = useState(null);
+          const [spinName, setSpinName] = useState(null);
+          const [spinning, setSpinning] = useState(false);
+          const spinRef = useRef(null);
+          const [riskMax, setRiskMax] = useState(5);
+          const [riskPhase, setRiskPhase] = useState('idle');
+          const riskRef = useRef(null);
           const [vanPos, setVanPos] = useState(null);
           const [vanFollow, setVanFollow] = useState(false);
           const [vanBusy, setVanBusy] = useState(false);
@@ -346,6 +356,77 @@
               setCurrentQ(null);
             }
           }, [gameLevel]);
+
+          // ===== Hub giochi di gruppo =====
+          const TEAM = useMemo(() => ['Leonardo', 'Simona', 'Simone', 'Alessandra', 'Stefano', 'Mattia', 'Martina', 'Bruno'], []);
+          const gameModes = useMemo(() => [
+            { id: 'preferiresti', label: 'Preferiresti', icon: 'code-branch' },
+            { id: 'mostlikely', label: 'Chi è più probabile', icon: 'hand-point-right' },
+            { id: 'truthdare', label: 'Verità o Obbligo', icon: 'masks-theater' },
+            { id: 'spinner', label: 'Estrai un membro', icon: 'arrows-spin' },
+            { id: 'risk', label: 'Quanto te la rischi', icon: 'dice-five' },
+            { id: 'challenge', label: 'Sfide', icon: 'fire-flame-curved' },
+          ], []);
+
+          const pickFrom = (arr, prev) => {
+            if (!arr || !arr.length) return null;
+            if (arr.length === 1) return arr[0];
+            let v = prev;
+            for (let i = 0; i < 8 && v === prev; i++) v = arr[Math.floor(Math.random() * arr.length)];
+            return v;
+          };
+
+          const nextMostLikely = () => { setMlQ(pickFrom((window.VD_GAMES || {}).mostLikely, mlQ)); };
+          const drawTruthDare = (kind) => {
+            const pool = (window.VD_GAMES || {})[kind === 'truth' ? 'truth' : 'dare'];
+            setTdCard({ kind, text: pickFrom(pool, tdCard && tdCard.text) });
+          };
+          const nextChallenge = () => { setChCard(pickFrom((window.VD_GAMES || {}).challenges, chCard)); };
+
+          // "Quanto te la rischi": countdown 3-2-1-VIA per dire il numero in sincrono.
+          const startRisk = () => {
+            clearTimeout(riskRef.current);
+            const seq = ['3', '2', '1', 'go'];
+            let i = 0;
+            setRiskPhase(seq[0]);
+            const step = () => {
+              i++;
+              if (i < seq.length) {
+                setRiskPhase(seq[i]);
+                riskRef.current = setTimeout(step, 850);
+              } else {
+                riskRef.current = setTimeout(() => setRiskPhase('idle'), 3000);
+              }
+            };
+            riskRef.current = setTimeout(step, 850);
+          };
+          const adjustRisk = (d) => setRiskMax(v => Math.min(20, Math.max(2, v + d)));
+
+          const spinMember = () => {
+            if (spinning) return;
+            setSpinning(true);
+            let ticks = 0;
+            const total = 16 + Math.floor(Math.random() * 8);
+            clearInterval(spinRef.current);
+            spinRef.current = setInterval(() => {
+              setSpinName(TEAM[Math.floor(Math.random() * TEAM.length)]);
+              ticks++;
+              if (ticks >= total) {
+                clearInterval(spinRef.current);
+                setSpinName(TEAM[Math.floor(Math.random() * TEAM.length)]);
+                setSpinning(false);
+              }
+            }, 80);
+          };
+
+          // Inizializza la carta quando cambi modalità
+          useEffect(() => {
+            const G = window.VD_GAMES || {};
+            if (gameMode === 'mostlikely' && !mlQ) setMlQ(pickFrom(G.mostLikely));
+            if (gameMode === 'challenge' && !chCard) setChCard(pickFrom(G.challenges));
+          }, [gameMode]);
+
+          useEffect(() => () => { clearInterval(spinRef.current); clearTimeout(riskRef.current); }, []);
 
           const counterConfig = useMemo(() => [
             { key: 'caffe', label: 'Caffè', icon: 'mug-hot', color: 'text-amber-700', bg: 'bg-amber-100/50', border: 'border-amber-200/50', hex: '#b45309' },
@@ -429,6 +510,11 @@
           const [mediaPreview, setMediaPreview] = useState(null);
           const [memoryCoords, setMemoryCoords] = useState(null);
           const [isLocating, setIsLocating] = useState(false);
+          const [recording, setRecording] = useState(false);
+          const [recordSecs, setRecordSecs] = useState(0);
+          const mediaRecorderRef = useRef(null);
+          const audioChunksRef = useRef([]);
+          const recordTimerRef = useRef(null);
           const fileInputRef = useRef(null);
           const mapRef = useRef(null);
           const mapInstanceRef = useRef(null);
@@ -467,12 +553,31 @@
             return 'GPS non supportato su questo dispositivo.';
           };
 
+          // Coordinate -> nome del luogo (OpenStreetMap reverse geocoding).
+          const reverseGeocode = async (lat, lng) => {
+            try {
+              const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=14&addressdetails=1&accept-language=it&lat=${lat}&lon=${lng}`, { headers: { 'Accept': 'application/json' } });
+              const data = await res.json();
+              const a = data && data.address;
+              if (!a) return null;
+              const place = a.city || a.town || a.village || a.hamlet || a.municipality || a.suburb || a.county || a.state;
+              const prov = a.county || a.state;
+              if (!place) return data.display_name ? data.display_name.split(',').slice(0, 2).join(',').trim() : null;
+              return prov && prov !== place ? `${place}, ${prov}` : place;
+            } catch (e) { console.warn('Reverse geocoding fallito:', e); return null; }
+          };
+
           const handleGetLocation = async () => {
             setIsLocating(true);
             setGeoMsg('');
             try {
               const pos = await getPosition();
-              setMemoryCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+              const lat = pos.coords.latitude, lng = pos.coords.longitude;
+              setMemoryCoords({ lat, lng });
+              // Riempi automaticamente il campo Luogo col nome del posto.
+              const name = await reverseGeocode(lat, lng);
+              if (name) setLocation(name);
+              else setGeoMsg('Posizione presa, ma nome non trovato: scrivilo tu.');
             } catch (e) {
               setGeoMsg(geoError(e));
             } finally {
@@ -512,7 +617,7 @@
               const lat = pos.coords.latitude, lng = pos.coords.longitude;
               await saveVanPos(lat, lng);
               if (mapInstanceRef.current) mapInstanceRef.current.setView([lat, lng], 14, { animate: true });
-              setGeoMsg('Van aggiornato 🚐');
+              setGeoMsg('Van aggiornato');
             } catch (e) {
               setGeoMsg(geoError(e));
             } finally {
@@ -581,6 +686,46 @@
             } catch (e) { console.warn('Geocoding fallito:', e); }
             return null;
           };
+
+          // Registrazione audio in-app (MediaRecorder).
+          const audioExt = (mime) => mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : mime.includes('mpeg') ? 'mp3' : 'weba';
+
+          const startRecording = async () => {
+            if (!navigator.mediaDevices || !window.MediaRecorder) { alert('Registrazione non supportata su questo browser.'); return; }
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              const mr = new MediaRecorder(stream);
+              audioChunksRef.current = [];
+              mr.ondataavailable = (e) => { if (e.data && e.data.size) audioChunksRef.current.push(e.data); };
+              mr.onstop = () => {
+                const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
+                const file = new File([blob], `registrazione-${Date.now()}.${audioExt(blob.type)}`, { type: blob.type });
+                if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+                setMediaFile(file);
+                setMediaPreview(URL.createObjectURL(blob));
+                stream.getTracks().forEach((t) => t.stop());
+              };
+              mr.start();
+              mediaRecorderRef.current = mr;
+              setRecording(true);
+              setRecordSecs(0);
+              clearInterval(recordTimerRef.current);
+              recordTimerRef.current = setInterval(() => setRecordSecs((s) => s + 1), 1000);
+            } catch (e) {
+              alert('Microfono non disponibile o permesso negato.');
+            }
+          };
+
+          const stopRecording = () => {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
+            clearInterval(recordTimerRef.current);
+            setRecording(false);
+          };
+
+          // Stop registrazione allo smontaggio
+          useEffect(() => () => { clearInterval(recordTimerRef.current); if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') mediaRecorderRef.current.stop(); }, []);
+
+          const fmtSecs = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
           const handleFileChange = (e) => {
             const file = e.target.files[0];
@@ -895,13 +1040,13 @@
           // --- ERROR SCREEN ---
           if (loadError && !loading) return (
             <div className="min-h-screen bg-stone-50 flex items-center justify-center p-6">
-              <div className="glass-card max-w-sm w-full text-center p-10 rounded-[2.5rem] border-white/60 shadow-xl">
-                <div className="w-16 h-16 bg-red-100/60 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6">
+              <div className="glass-card max-w-sm w-full text-center p-10 rounded-3xl border-white/60 shadow-xl">
+                <div className="w-16 h-16 bg-red-100/60 rounded-3xl flex items-center justify-center mx-auto mb-6">
                   <i className="fa-solid fa-wifi text-2xl text-red-500"></i>
                 </div>
                 <h2 className="text-2xl font-black text-stone-900 tracking-tighter mb-2">Niente connessione</h2>
                 <p className="text-stone-500 font-medium text-sm mb-8">Non riesco a raggiungere il diario. Controlla la rete e riprova.</p>
-                <button onClick={loadData} className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-[1.25rem] font-black transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-3">
+                <button onClick={loadData} className="w-full h-14 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-3">
                   <i className="fa-solid fa-rotate-right"></i> Riprova
                 </button>
               </div>
@@ -912,7 +1057,7 @@
           if (loading) return (
             <div className="min-h-screen bg-stone-50 flex items-center justify-center">
               <div className="text-center">
-                <i className="fa-solid fa-location-arrow text-5xl text-emerald-600 mb-6 block" style={{animation: 'pulse 1.5s ease-in-out infinite'}}></i>
+                <span className="text-5xl mb-6 block" style={{animation: 'pulse 1.5s ease-in-out infinite'}}>🤙</span>
                 <p className="text-stone-500 font-bold text-lg tracking-tight">Preparando il viaggio...</p>
               </div>
             </div>
@@ -923,7 +1068,7 @@
           const renderMapView = () => (
             <div className="max-w-4xl mx-auto py-6 md:py-8 space-y-6 px-4">
               <div className="flex items-center gap-4 mb-4">
-                <div className="w-14 h-14 bg-white/80 backdrop-blur rounded-[1.5rem] flex items-center justify-center shadow-sm border border-white/60">
+                <div className="w-14 h-14 bg-white/80 backdrop-blur rounded-3xl flex items-center justify-center shadow-sm border border-white/60">
                    <i className="fa-solid fa-route text-2xl text-[#F97D16]"></i>
                 </div>
                 <div>
@@ -932,7 +1077,7 @@
                 </div>
               </div>
 
-              <div className="rounded-[2.5rem] shadow-2xl shadow-stone-200/50 border border-white/60 overflow-hidden relative">
+              <div className="rounded-3xl shadow-2xl shadow-stone-200/50 border border-white/60 overflow-hidden relative">
                 <div ref={mapRef} className="w-full h-[70dvh] z-0"></div>
 
                 <div className="absolute top-4 right-4 z-[999] flex flex-col items-end gap-2">
@@ -965,7 +1110,7 @@
               </div>
 
               {/* Controlli VAN — barra sotto la mappa, in flusso normale (niente overlap col menu) */}
-              <div className="glass-card rounded-[1.75rem] border-white/60 shadow-lg p-3 flex flex-col gap-2">
+              <div className="glass-card rounded-3xl border-white/60 shadow-lg p-3 flex flex-col gap-2">
                 <div className="flex gap-2">
                   <button
                     onClick={handleVanHere}
@@ -995,7 +1140,7 @@
 
               {selectedPinInfo && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm" onClick={() => setSelectedPinInfo(null)}>
-                  <div className="glass-card rounded-[2.5rem] w-full max-w-lg max-h-[85dvh] flex flex-col relative shadow-2xl border-white/80" onClick={e => e.stopPropagation()}>
+                  <div className="glass-card rounded-3xl w-full max-w-lg max-h-[85dvh] flex flex-col relative shadow-2xl border-white/80" onClick={e => e.stopPropagation()}>
                     <div className="flex-none flex justify-between items-center p-5 border-b border-stone-100/50">
                       <span className="font-black text-stone-400 text-[11px] tracking-widest uppercase pl-2">Dettaglio</span>
                       <button onClick={() => setSelectedPinInfo(null)} className="w-10 h-10 bg-stone-100/50 text-stone-500 rounded-full flex items-center justify-center hover:bg-stone-200 transition-colors">
@@ -1006,7 +1151,7 @@
                     <div className="overflow-y-auto p-6 md:p-8 no-scrollbar">
                       {selectedPinInfo.isMemory && (
                         <div>
-                          <div className="inline-block px-3 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[11px] font-black mb-4 uppercase tracking-wider">
+                          <div className="inline-block px-3 py-1 bg-emerald-100 text-emerald-700 rounded-2xl text-[11px] font-black mb-4 uppercase tracking-wider">
                             {selectedPinInfo.date}
                           </div>
                           <h3 className="text-3xl font-black text-stone-900 mb-2 leading-tight tracking-tighter">{selectedPinInfo.title}</h3>
@@ -1014,12 +1159,12 @@
                             <i className="fa-solid fa-location-dot text-emerald-500"></i> {selectedPinInfo.location}
                           </div>
                           {selectedPinInfo.mediaUrl && (
-                            <div className="mb-6 rounded-[1.5rem] overflow-hidden bg-stone-100/50 shadow-inner">
+                            <div className="mb-6 rounded-3xl overflow-hidden bg-stone-100/50 shadow-inner">
                               {renderMedia(selectedPinInfo.mediaUrl, selectedPinInfo.type, { imgClass: 'w-full max-h-[40vh] object-contain', videoClass: 'w-full max-h-[40vh] object-contain bg-black' })}
                             </div>
                           )}
                           {selectedPinInfo.text && (
-                            <div className="bg-stone-50/50 p-6 rounded-[1.5rem] border border-stone-100">
+                            <div className="bg-stone-50/50 p-6 rounded-3xl border border-stone-100">
                                 <p className="text-stone-600 leading-relaxed italic">"{selectedPinInfo.text}"</p>
                             </div>
                           )}
@@ -1039,7 +1184,7 @@
                               }
                               return (
                                 <>
-                                  <div className={`w-24 h-24 rounded-[2rem] ${conf.bg} border-2 border-white flex items-center justify-center mb-6 shadow-xl`}>
+                                  <div className={`w-24 h-24 rounded-3xl ${conf.bg} border-2 border-white flex items-center justify-center mb-6 shadow-xl`}>
                                     <i className={`fa-solid fa-${conf.icon} text-4xl ${conf.color}`}></i>
                                   </div>
                                   <h3 className="text-3xl font-black text-stone-900 mb-2 tracking-tighter">{conf.label}</h3>
@@ -1055,7 +1200,7 @@
 
                       {selectedPinInfo.isVan && (
                         <div className="flex flex-col items-center text-center py-8">
-                          <div className="w-24 h-24 rounded-[2rem] bg-[#0057FF]/10 border-2 border-white flex items-center justify-center mb-6 shadow-xl">
+                          <div className="w-24 h-24 rounded-3xl bg-[#0057FF]/10 border-2 border-white flex items-center justify-center mb-6 shadow-xl">
                             <i className="fa-solid fa-van-shuttle text-4xl text-[#0057FF]"></i>
                           </div>
                           <h3 className="text-3xl font-black text-stone-900 mb-2 tracking-tighter">Il nostro Van</h3>
@@ -1075,7 +1220,7 @@
           const renderCountersView = () => (
             <div className="max-w-4xl mx-auto py-6 md:py-8 space-y-6 px-4">
               <div className="flex items-center gap-4 mb-8">
-                <div className="w-14 h-14 bg-rose-100/50 backdrop-blur rounded-[1.5rem] flex items-center justify-center shadow-sm border border-white/60">
+                <div className="w-14 h-14 bg-rose-100/50 backdrop-blur rounded-3xl flex items-center justify-center shadow-sm border border-white/60">
                   <i className="fa-solid fa-hashtag text-2xl text-rose-600"></i>
                 </div>
                 <div>
@@ -1085,9 +1230,9 @@
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
                 {counterConfig.map(conf => (
-                  <div key={conf.key} className="glass-card p-5 md:p-6 rounded-[2rem] border-white/60 shadow-xl shadow-stone-200/30 flex flex-col items-center group relative overflow-hidden">
+                  <div key={conf.key} className="glass-card p-5 md:p-6 rounded-3xl border-white/60 shadow-xl shadow-stone-200/30 flex flex-col items-center group relative overflow-hidden">
                     <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-28 h-28 rounded-full blur-3xl opacity-25 pointer-events-none" style={{ backgroundColor: conf.hex }}></div>
-                    <div className={`relative w-14 h-14 rounded-[1.25rem] ${conf.bg} border border-white/80 flex items-center justify-center mb-3 shadow-sm transition-transform duration-200 group-active:scale-90`}>
+                    <div className={`relative w-14 h-14 rounded-2xl ${conf.bg} border border-white/80 flex items-center justify-center mb-3 shadow-sm transition-transform duration-200 group-active:scale-90`}>
                       <i className={`fa-solid fa-${conf.icon} text-2xl ${conf.color}`}></i>
                     </div>
                     <h3 className="font-black text-stone-400 text-[10px] uppercase tracking-widest mb-1">{conf.label}</h3>
@@ -1108,10 +1253,10 @@
 
           const renderAddView = () => (
             <div className="max-w-2xl mx-auto py-6 md:py-8 px-4">
-              <div className="glass-card p-6 md:p-10 rounded-[2.5rem] shadow-2xl shadow-stone-200/50 border-white/60">
+              <div className="glass-card p-6 md:p-10 rounded-3xl shadow-2xl shadow-stone-200/50 border-white/60">
                 <header className="flex items-center gap-4 mb-8">
                    <div className="w-12 h-12 bg-emerald-100/50 rounded-2xl flex items-center justify-center">
-                     <i className="fa-solid fa-plus text-xl text-emerald-600"></i>
+                     <i className="fa-solid fa-plus text-xl"></i>
                    </div>
                    <h2 className="text-2xl font-black text-stone-900 tracking-tighter">Nuova Tappa</h2>
                 </header>
@@ -1120,8 +1265,8 @@
                   {['photo', 'video', 'audio', 'text'].map((type) => (
                     <button
                       key={type}
-                      onClick={() => { setMemoryType(type); setMediaFile(null); setMediaPreview(null); }}
-                      className={`flex-1 flex flex-col items-center gap-1 py-3 px-1 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                      onClick={() => { if (recording) stopRecording(); setMemoryType(type); setMediaFile(null); setMediaPreview(null); }}
+                      className={`flex-1 flex flex-col items-center gap-1 py-3 px-1 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${
                         memoryType === type ? 'bg-white shadow-sm text-emerald-700' : 'text-stone-400 hover:text-stone-600'
                       }`}
                     >
@@ -1144,10 +1289,13 @@
                           <i className="fa-solid fa-location-dot absolute left-4 top-1/2 -translate-y-1/2 text-stone-300"></i>
                           <input required type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="Località" className="w-full pl-11 p-4 bg-white/50 border border-stone-100 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-bold"/>
                         </div>
-                        <button type="button" onClick={handleGetLocation} className={`w-14 h-14 rounded-2xl border flex items-center justify-center transition-all ${memoryCoords ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-stone-50 border-stone-100 text-stone-400 active:scale-95'}`}>
-                          <i className={`fa-solid fa-crosshairs text-lg ${isLocating ? 'animate-pulse' : ''}`}></i>
+                        <button type="button" onClick={handleGetLocation} title="Usa la mia posizione" className={`w-14 h-14 rounded-2xl border flex items-center justify-center transition-all ${memoryCoords ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-stone-50 border-stone-100 text-stone-400 active:scale-95'}`}>
+                          <i className={`fa-solid ${isLocating ? 'fa-spinner animate-spin' : 'fa-crosshairs'} text-lg`}></i>
                         </button>
                       </div>
+                      {isLocating && <p className="text-[11px] font-bold text-stone-400 ml-2">Rilevo la posizione…</p>}
+                      {!isLocating && geoMsg && <p className="text-[11px] font-bold text-stone-500 ml-2">{geoMsg}</p>}
+                      {!isLocating && memoryCoords && !geoMsg && <p className="text-[11px] font-bold text-emerald-600 ml-2"><i className="fa-solid fa-check"></i> Posizione rilevata</p>}
                     </div>
                   </div>
 
@@ -1162,7 +1310,30 @@
                   {memoryType !== 'text' && (
                     <div className="space-y-2">
                       <label className="text-[11px] font-black text-stone-400 uppercase tracking-widest ml-2">Media</label>
-                      <div onClick={() => fileInputRef.current.click()} className="w-full border-2 border-dashed border-stone-200 rounded-[2rem] p-8 text-center cursor-pointer bg-stone-50/30 hover:bg-emerald-50/30 hover:border-emerald-200 transition-all flex flex-col items-center justify-center gap-4">
+
+                      {memoryType === 'audio' && !mediaPreview && (
+                        <div className="w-full rounded-3xl p-6 bg-stone-50/40 border border-stone-100 flex flex-col items-center gap-4">
+                          <button
+                            type="button"
+                            onClick={recording ? stopRecording : startRecording}
+                            className={`w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl shadow-xl transition-all active:scale-90 ${recording ? 'bg-red-600 shadow-red-600/30 animate-pulse' : 'bg-emerald-600 shadow-emerald-600/30'}`}
+                          >
+                            <i className={`fa-solid ${recording ? 'fa-stop' : 'fa-microphone'}`}></i>
+                          </button>
+                          <div className="text-center">
+                            <div className="font-black text-stone-800 tabular-nums text-lg">{recording ? fmtSecs(recordSecs) : 'Registra audio'}</div>
+                            <div className="text-stone-400 font-bold text-[11px] uppercase tracking-widest">{recording ? 'Tocca per fermare' : 'Tocca il microfono per iniziare'}</div>
+                          </div>
+                          <div className="text-stone-300 font-bold text-[11px] uppercase tracking-widest">— oppure —</div>
+                          <button type="button" onClick={() => fileInputRef.current.click()} className="text-emerald-600 font-black text-xs uppercase tracking-widest hover:text-emerald-500">
+                            <i className="fa-solid fa-folder-open mr-1"></i> Carica un file
+                          </button>
+                          <input type="file" ref={fileInputRef} accept="audio/*" onChange={handleFileChange} className="hidden" />
+                        </div>
+                      )}
+
+                      {!(memoryType === 'audio' && !mediaPreview) && (
+                      <div onClick={() => fileInputRef.current.click()} className="w-full border-2 border-dashed border-stone-200 rounded-3xl p-8 text-center cursor-pointer bg-stone-50/30 hover:bg-emerald-50/30 hover:border-emerald-200 transition-all flex flex-col items-center justify-center gap-4">
                         <input type="file" ref={fileInputRef} accept={memoryType === 'photo' ? 'image/*' : memoryType === 'video' ? 'video/*' : 'audio/*'} onChange={handleFileChange} className="hidden" />
                         {mediaPreview ? (
                           <div className="relative group">
@@ -1182,6 +1353,7 @@
                           </>
                         )}
                       </div>
+                      )}
                     </div>
                   )}
 
@@ -1190,7 +1362,7 @@
                     <textarea value={text} onChange={e => setText(e.target.value)} rows={4} placeholder="Cosa ricorderai di questo momento?" className="w-full p-4 bg-white/50 border border-stone-100 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none resize-none transition-all font-medium"></textarea>
                   </div>
 
-                  <button type="submit" disabled={saving} className="w-full h-16 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-[1.5rem] font-black text-lg transition-all shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-3 active:scale-95">
+                  <button type="submit" disabled={saving} className="w-full h-16 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-3xl font-black text-lg transition-all shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-3 active:scale-95">
                     {saving ? <i className="fa-solid fa-spinner animate-spin"></i> : <><i className="fa-solid fa-cloud-arrow-up"></i> SALVA TAPPA</>}
                   </button>
                 </form>
@@ -1201,7 +1373,7 @@
           const renderTimelineView = () => (
             <div className="max-w-3xl mx-auto py-6 md:py-8 px-4">
               <div className="flex items-center gap-4 mb-10">
-                <div className="w-14 h-14 bg-emerald-100/50 backdrop-blur rounded-[1.5rem] flex items-center justify-center shadow-sm border border-white/60">
+                <div className="w-14 h-14 bg-emerald-100/50 backdrop-blur rounded-3xl flex items-center justify-center shadow-sm border border-white/60">
                   <i className="fa-solid fa-location-arrow text-2xl text-emerald-600"></i>
                 </div>
                 <div>
@@ -1212,19 +1384,19 @@
 
               <div className="relative space-y-8">
                 {memories.length === 0 ? (
-                  <div className="glass-card p-12 text-center rounded-[2.5rem] border-white/60">
+                  <div className="glass-card p-12 text-center rounded-3xl border-white/60">
                     <i className="fa-solid fa-compass text-6xl text-stone-200 mb-6 block animate-pulse"></i>
                     <p className="text-stone-400 font-black uppercase tracking-widest text-xs">Ancora nessun ricordo...</p>
                   </div>
                 ) : (
                   memories.map((memory, index) => (
                     <div key={memory.id} className="relative group">
-                      <div className="glass-card p-5 md:p-8 rounded-[2rem] shadow-xl shadow-stone-200/30 border-white/60 hover:shadow-2xl transition-all duration-300">
+                      <div className="glass-card p-5 md:p-8 rounded-3xl shadow-xl shadow-stone-200/30 border-white/60 hover:shadow-2xl transition-all duration-300">
                         <div className="flex justify-between items-start mb-4">
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-stone-100/50 text-stone-500 rounded-lg font-black text-[10px] uppercase tracking-widest">
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-stone-100/50 text-stone-500 rounded-2xl font-black text-[10px] uppercase tracking-widest">
                             <i className="fa-solid fa-calendar-day text-[9px]"></i> {memory.date}
                           </div>
-                          <button onClick={() => deleteMemory(memory.id)} className="w-9 h-9 flex items-center justify-center text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+                          <button onClick={() => deleteMemory(memory.id)} className="w-9 h-9 flex items-center justify-center text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
                             <i className="fa-solid fa-trash-can text-sm"></i>
                           </button>
                         </div>
@@ -1233,14 +1405,14 @@
                         <div className="flex items-center gap-2 text-emerald-600 text-xs font-black uppercase tracking-widest mb-6 flex-wrap">
                           <span className="flex items-center gap-2"><i className="fa-solid fa-location-dot"></i> {memory.location}</span>
                           {memory.lat && memory.lng && (
-                            <span className="inline-flex items-center gap-1 text-[9px] text-stone-400 bg-stone-100/60 px-2 py-0.5 rounded-md normal-case tracking-normal">
+                            <span className="inline-flex items-center gap-1 text-[9px] text-stone-400 bg-stone-100/60 px-2 py-0.5 rounded-2xl normal-case tracking-normal">
                               <i className="fa-solid fa-map-pin"></i> GPS
                             </span>
                           )}
                         </div>
                         
                         {memory.mediaUrl && (
-                          <div className="mb-6 rounded-[1.5rem] overflow-hidden bg-stone-100 ring-1 ring-stone-200/20 shadow-inner">
+                          <div className="mb-6 rounded-3xl overflow-hidden bg-stone-100 ring-1 ring-stone-200/20 shadow-inner">
                             {renderMedia(memory.mediaUrl, memory.type, { imgClass: 'w-full max-h-[50vh] object-cover', videoClass: 'w-full max-h-[50vh] object-contain bg-black' })}
                           </div>
                         )}
@@ -1279,7 +1451,7 @@
             return (
             <div className="max-w-4xl mx-auto py-6 md:py-8 space-y-6 px-4">
               <div className="flex items-center gap-4 mb-2">
-                <div className="w-14 h-14 bg-blue-100/50 backdrop-blur rounded-[1.5rem] flex items-center justify-center shadow-sm border border-white/60">
+                <div className="w-14 h-14 bg-blue-100/50 backdrop-blur rounded-3xl flex items-center justify-center shadow-sm border border-white/60">
                   <i className="fa-solid fa-chart-simple text-2xl text-blue-600"></i>
                 </div>
                 <div>
@@ -1296,7 +1468,7 @@
                   { label: 'Giorni', value: stats.tripDays, icon: 'calendar-day', color: '#16a34a' },
                   { label: 'Eventi', value: totalEvents, icon: 'hashtag', color: '#dc2626' },
                 ].map(s => (
-                  <div key={s.label} className="glass-card p-5 rounded-[1.75rem] border-white/60 relative overflow-hidden">
+                  <div key={s.label} className="glass-card p-5 rounded-3xl border-white/60 relative overflow-hidden">
                     <div className="absolute -top-6 -right-6 w-20 h-20 rounded-full blur-2xl opacity-20" style={{ backgroundColor: s.color }}></div>
                     <i className={`fa-solid fa-${s.icon} text-sm mb-3 block`} style={{ color: s.color }}></i>
                     <div className="text-4xl font-black tracking-tighter tabular-nums" style={{ color: s.color }}>{s.value}</div>
@@ -1307,9 +1479,9 @@
 
               {/* Periodo */}
               {stats.firstDate && (
-                <div className="glass-card p-5 rounded-[1.75rem] border-white/60 flex items-center justify-between gap-4">
+                <div className="glass-card p-5 rounded-3xl border-white/60 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-stone-100/60 flex items-center justify-center text-stone-500"><i className="fa-solid fa-flag-checkered"></i></div>
+                    <div className="w-10 h-10 rounded-2xl bg-stone-100/60 flex items-center justify-center text-stone-500"><i className="fa-solid fa-flag-checkered"></i></div>
                     <div>
                       <div className="text-stone-400 text-[10px] font-black uppercase tracking-widest">Periodo</div>
                       <div className="font-black text-stone-800 text-sm">{formatDate(stats.firstDate)} → {formatDate(stats.lastDate)}</div>
@@ -1325,7 +1497,7 @@
               )}
 
               {/* Grafico attività */}
-              <div className="glass-card p-6 md:p-8 rounded-[2rem] border-white/60">
+              <div className="glass-card p-6 md:p-8 rounded-3xl border-white/60">
                 <h3 className="font-black text-stone-900 text-lg mb-6 flex items-center gap-2 tracking-tighter">
                   <i className="fa-solid fa-chart-column text-blue-600"></i> Attività nel tempo
                 </h3>
@@ -1346,7 +1518,7 @@
 
               {/* Mix media + GPS */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="glass-card p-6 md:p-8 rounded-[2rem] border-white/60">
+                <div className="glass-card p-6 md:p-8 rounded-3xl border-white/60">
                   <h3 className="font-black text-stone-900 text-lg mb-6 flex items-center gap-2 tracking-tighter">
                     <i className="fa-solid fa-photo-film text-orange-500"></i> Tipo di contenuto
                   </h3>
@@ -1365,7 +1537,7 @@
                   </div>
                 </div>
 
-                <div className="glass-card p-6 md:p-8 rounded-[2rem] border-white/60 flex flex-col">
+                <div className="glass-card p-6 md:p-8 rounded-3xl border-white/60 flex flex-col">
                   <h3 className="font-black text-stone-900 text-lg mb-6 flex items-center gap-2 tracking-tighter">
                     <i className="fa-solid fa-map-location-dot text-blue-600"></i> Geolocalizzazione
                   </h3>
@@ -1387,7 +1559,7 @@
               </div>
 
               {/* Eventi in classifica */}
-              <div className="glass-card p-6 md:p-8 rounded-[2.5rem] border-white/60 overflow-hidden relative">
+              <div className="glass-card p-6 md:p-8 rounded-3xl border-white/60 overflow-hidden relative">
                  <div className="absolute -top-6 -right-6 w-32 h-32 bg-rose-500/5 blur-2xl rounded-full"></div>
                  <div className="flex items-center justify-between mb-6">
                    <h3 className="font-black text-stone-900 text-lg flex items-center gap-2 tracking-tighter">
@@ -1404,7 +1576,7 @@
                      const pct = topEvent && topEvent.n ? (c.n / topEvent.n) * 100 : 0;
                      return (
                        <div key={c.key} className="flex items-center gap-3">
-                         <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center flex-none`}>
+                         <div className={`w-9 h-9 rounded-2xl ${c.bg} flex items-center justify-center flex-none`}>
                            <i className={`fa-solid fa-${c.icon} ${c.color} text-sm`}></i>
                          </div>
                          <div className="flex-1 min-w-0">
@@ -1427,59 +1599,198 @@
 
           const renderGameView = () => {
             const meta = gameLevels.find(l => l.id === (currentQ ? currentQ.l : gameLevel)) || gameLevels[0];
+            const cardCls = "glass-card rounded-3xl border-white/60 shadow-2xl shadow-stone-200/50 p-8 md:p-12 min-h-[280px] flex flex-col items-center justify-center text-center relative overflow-hidden";
+            const subtitle = {
+              preferiresti: 'Una domanda a caso, a turno',
+              mostlikely: 'Il gruppo punta una persona',
+              truthdare: 'Scegli e affronta la carta',
+              spinner: 'Chi tocca adesso?',
+              risk: 'Pensate un numero, ditelo al VIA',
+              challenge: 'Una sfida per il gruppo',
+            }[gameMode];
+            const G = (typeof window !== 'undefined' && window.VD_GAMES) || {};
+
             return (
               <div className="max-w-2xl mx-auto py-6 md:py-8 space-y-6 px-4">
                 <div className="flex items-center gap-4 mb-2">
-                  <div className="w-14 h-14 bg-fuchsia-100/50 backdrop-blur rounded-[1.5rem] flex items-center justify-center shadow-sm border border-white/60">
+                  <div className="w-14 h-14 bg-fuchsia-100/50 backdrop-blur rounded-3xl flex items-center justify-center shadow-sm border border-white/60">
                     <i className="fa-solid fa-dice text-2xl text-fuchsia-600"></i>
                   </div>
                   <div>
                     <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tighter leading-none">Il Gioco</h2>
-                    <p className="text-stone-500 font-bold text-sm">Una domanda a caso, a turno</p>
+                    <p className="text-stone-500 font-bold text-sm">{subtitle}</p>
                   </div>
                 </div>
 
-                {/* Filtro intensità */}
-                <div className="flex gap-2 bg-stone-100/50 p-1.5 rounded-2xl">
-                  {gameLevels.map(lv => (
+                {/* Selettore modalità */}
+                <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 pb-1">
+                  {gameModes.map(gm => (
                     <button
-                      key={lv.id}
-                      onClick={() => setGameLevel(lv.id)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
-                        gameLevel === lv.id ? `bg-white shadow-sm ${lv.color}` : 'text-stone-400 hover:text-stone-600'
-                      }`}
+                      key={gm.id}
+                      onClick={() => setGameMode(gm.id)}
+                      className={`flex-none flex items-center gap-2 px-4 py-2.5 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all border ${gameMode === gm.id ? 'bg-stone-900 text-white border-stone-900 shadow-md' : 'bg-white/70 text-stone-500 border-stone-200'}`}
                     >
-                      <i className={`fa-solid fa-${lv.icon}`}></i>
-                      <span>{lv.label}</span>
+                      <i className={`fa-solid fa-${gm.icon}`}></i> {gm.label}
                     </button>
                   ))}
                 </div>
 
-                {/* Card domanda */}
-                <div className="glass-card rounded-[2.5rem] border-white/60 shadow-2xl shadow-stone-200/50 p-8 md:p-12 min-h-[300px] flex flex-col items-center justify-center text-center relative overflow-hidden">
-                  <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: meta.hex }}></div>
-                  {currentQ ? (
-                    <>
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: meta.hex + '22', color: meta.hex }}>
-                        <i className={`fa-solid fa-${meta.icon}`}></i> {meta.label}
-                      </span>
-                      <p className={`text-2xl md:text-3xl font-black text-stone-900 tracking-tight leading-snug relative z-10 transition-all duration-200 ${qSpin ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
-                        {currentQ.t}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-stone-400 font-bold relative z-10">Nessuna domanda disponibile.</p>
-                  )}
-                </div>
+                {/* ===== PREFERIRESTI ===== */}
+                {gameMode === 'preferiresti' && (
+                  <>
+                    <div className="flex gap-2 bg-stone-100/50 p-1.5 rounded-2xl">
+                      {gameLevels.map(lv => (
+                        <button key={lv.id} onClick={() => setGameLevel(lv.id)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-1 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${gameLevel === lv.id ? `bg-white shadow-sm ${lv.color}` : 'text-stone-400 hover:text-stone-600'}`}>
+                          <i className={`fa-solid fa-${lv.icon}`}></i><span>{lv.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className={cardCls}>
+                      <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: meta.hex }}></div>
+                      {currentQ ? (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: meta.hex + '22', color: meta.hex }}>
+                            <i className={`fa-solid fa-${meta.icon}`}></i> {meta.label}
+                          </span>
+                          <p className={`text-2xl md:text-3xl font-black text-stone-900 tracking-tight leading-snug relative z-10 transition-all duration-200 ${qSpin ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>{currentQ.t}</p>
+                        </>
+                      ) : <p className="text-stone-400 font-bold relative z-10">Nessuna domanda disponibile.</p>}
+                    </div>
+                    <button onClick={nextQuestion} className="w-full h-16 bg-stone-900 hover:bg-stone-800 text-white rounded-3xl font-black text-lg transition-all shadow-xl shadow-stone-300/40 flex items-center justify-center gap-3 active:scale-95">
+                      <i className="fa-solid fa-shuffle"></i> Prossima domanda
+                    </button>
+                    <p className="text-center text-stone-400 text-[11px] font-bold uppercase tracking-widest">{questionPool.length} domande in questa categoria</p>
+                  </>
+                )}
 
-                {/* Bottone */}
-                <button
-                  onClick={nextQuestion}
-                  className="w-full h-16 bg-stone-900 hover:bg-stone-800 text-white rounded-[1.5rem] font-black text-lg transition-all shadow-xl shadow-stone-300/40 flex items-center justify-center gap-3 active:scale-95"
-                >
-                  <i className="fa-solid fa-shuffle"></i> Prossima domanda
-                </button>
-                <p className="text-center text-stone-400 text-[11px] font-bold uppercase tracking-widest">{questionPool.length} domande in questa categoria</p>
+                {/* ===== CHI È PIÙ PROBABILE ===== */}
+                {gameMode === 'mostlikely' && (
+                  <>
+                    <div className={cardCls}>
+                      <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: '#0057FF' }}></div>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: '#0057FF22', color: '#0057FF' }}>
+                        <i className="fa-solid fa-hand-point-right"></i> Chi è più probabile
+                      </span>
+                      <p className="text-2xl md:text-3xl font-black text-stone-900 tracking-tight leading-snug relative z-10">
+                        {mlQ ? `Chi è più probabile che ${mlQ}?` : '…'}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {TEAM.map(n => (
+                        <span key={n} className="px-3 py-1 rounded-full bg-white/70 border border-stone-200 text-xs font-black text-stone-600">{n}</span>
+                      ))}
+                    </div>
+                    <button onClick={nextMostLikely} className="w-full h-16 bg-stone-900 hover:bg-stone-800 text-white rounded-3xl font-black text-lg transition-all shadow-xl shadow-stone-300/40 flex items-center justify-center gap-3 active:scale-95">
+                      <i className="fa-solid fa-shuffle"></i> Prossima
+                    </button>
+                  </>
+                )}
+
+                {/* ===== VERITÀ O OBBLIGO ===== */}
+                {gameMode === 'truthdare' && (
+                  <>
+                    <div className={cardCls}>
+                      {tdCard ? (
+                        <>
+                          <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: tdCard.kind === 'truth' ? '#059669' : '#dc2626' }}></div>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: (tdCard.kind === 'truth' ? '#059669' : '#dc2626') + '22', color: tdCard.kind === 'truth' ? '#059669' : '#dc2626' }}>
+                            <span>{tdCard.kind === 'truth' ? 'comment' : 'bolt'}</span> {tdCard.kind === 'truth' ? 'Verità' : 'Obbligo'}
+                          </span>
+                          <p className="text-2xl md:text-3xl font-black text-stone-900 tracking-tight leading-snug relative z-10">{tdCard.text}</p>
+                        </>
+                      ) : <p className="text-stone-400 font-bold relative z-10">Scegli Verità o Obbligo</p>}
+                    </div>
+                    <div className="flex gap-3">
+                      <button onClick={() => drawTruthDare('truth')} className="flex-1 h-16 bg-emerald-600 hover:bg-emerald-500 text-white rounded-3xl font-black text-lg transition-all shadow-xl shadow-emerald-600/30 flex items-center justify-center gap-2 active:scale-95">
+                        <i className="fa-solid fa-comment"></i> Verità
+                      </button>
+                      <button onClick={() => drawTruthDare('dare')} className="flex-1 h-16 bg-red-600 hover:bg-red-500 text-white rounded-3xl font-black text-lg transition-all shadow-xl shadow-red-600/30 flex items-center justify-center gap-2 active:scale-95">
+                        <i className="fa-solid fa-bolt"></i> Obbligo
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {/* ===== ESTRAI UN MEMBRO ===== */}
+                {gameMode === 'spinner' && (
+                  <>
+                    <div className={cardCls}>
+                      <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: '#0057FF' }}></div>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: '#0057FF22', color: '#0057FF' }}>
+                        <i className="fa-solid fa-arrows-spin"></i> Tocca a…
+                      </span>
+                      <p className={`text-5xl md:text-6xl font-black text-stone-900 tracking-tighter relative z-10 transition-all ${spinning ? 'opacity-60 scale-95' : 'opacity-100 scale-100'}`}>
+                        {spinName || '—'}
+                      </p>
+                    </div>
+                    <button onClick={spinMember} disabled={spinning} className="w-full h-16 bg-stone-900 hover:bg-stone-800 disabled:opacity-60 text-white rounded-3xl font-black text-lg transition-all shadow-xl shadow-stone-300/40 flex items-center justify-center gap-3 active:scale-95">
+                      <i className={`fa-solid ${spinning ? 'fa-arrows-spin animate-spin' : 'fa-shuffle'}`}></i> {spinning ? 'Estraggo…' : 'Estrai'}
+                    </button>
+                  </>
+                )}
+
+                {/* ===== QUANTO TE LA RISCHI ===== */}
+                {gameMode === 'risk' && (
+                  <>
+                    {/* Stepper del rischio */}
+                    <div className="glass-card rounded-3xl border-white/60 shadow-lg p-4 flex items-center justify-between">
+                      <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-stone-400">Numero da 1 a</div>
+                        <div className="text-stone-500 font-bold text-[11px]">più è basso, più rischi</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => adjustRisk(-1)} disabled={riskPhase !== 'idle'} className="w-11 h-11 rounded-2xl bg-white/70 border border-stone-200 text-stone-600 disabled:opacity-40 flex items-center justify-center active:scale-90 transition-all">
+                          <i className="fa-solid fa-minus"></i>
+                        </button>
+                        <span className="text-3xl font-black text-stone-900 tabular-nums w-10 text-center">{riskMax}</span>
+                        <button onClick={() => adjustRisk(1)} disabled={riskPhase !== 'idle'} className="w-11 h-11 rounded-2xl bg-white/70 border border-stone-200 text-stone-600 disabled:opacity-40 flex items-center justify-center active:scale-90 transition-all">
+                          <i className="fa-solid fa-plus"></i>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className={cardCls}>
+                      <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: riskPhase === 'go' ? '#dc2626' : '#F97D16' }}></div>
+                      {riskPhase === 'idle' && (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: '#F97D1622', color: '#F97D16' }}>
+                            <i className="fa-solid fa-dice-five"></i> Quanto te la rischi
+                          </span>
+                          <p className="text-xl md:text-2xl font-black text-stone-800 tracking-tight leading-snug relative z-10">
+                            Pensate un numero da <span className="text-[#F97D16]">1 a {riskMax}</span>.<br/>Al VIA ditelo insieme: se è uguale, penitenza!
+                          </p>
+                        </>
+                      )}
+                      {(riskPhase === '3' || riskPhase === '2' || riskPhase === '1') && (
+                        <p key={riskPhase} className="text-8xl font-black text-stone-900 tabular-nums relative z-10 animate-[pulse_0.4s_ease-out]">{riskPhase}</p>
+                      )}
+                      {riskPhase === 'go' && (
+                        <p className="text-5xl md:text-6xl font-black text-red-600 tracking-tighter relative z-10 animate-pulse">DITE IL NUMERO!</p>
+                      )}
+                    </div>
+
+                    <button onClick={startRisk} disabled={riskPhase !== 'idle'} className="w-full h-16 bg-stone-900 hover:bg-stone-800 disabled:opacity-60 text-white rounded-3xl font-black text-lg transition-all shadow-xl shadow-stone-300/40 flex items-center justify-center gap-3 active:scale-95">
+                      <i className="fa-solid fa-bolt"></i> {riskPhase === 'idle' ? 'VIA!' : '…'}
+                    </button>
+                  </>
+                )}
+
+                {/* ===== SFIDE ===== */}
+                {gameMode === 'challenge' && (
+                  <>
+                    <div className={cardCls}>
+                      <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ backgroundColor: '#F97D16' }}></div>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-6 relative z-10" style={{ backgroundColor: '#F97D1622', color: '#F97D16' }}>
+                        <i className="fa-solid fa-fire-flame-curved"></i> Sfida di gruppo
+                      </span>
+                      <p className="text-2xl md:text-3xl font-black text-stone-900 tracking-tight leading-snug relative z-10">{chCard || '…'}</p>
+                    </div>
+                    <button onClick={nextChallenge} className="w-full h-16 bg-stone-900 hover:bg-stone-800 text-white rounded-3xl font-black text-lg transition-all shadow-xl shadow-stone-300/40 flex items-center justify-center gap-3 active:scale-95">
+                      <i className="fa-solid fa-shuffle"></i> Altra sfida
+                    </button>
+                  </>
+                )}
               </div>
             );
           };
@@ -1487,7 +1798,7 @@
           const renderOutputView = () => {
             const totalEvents = counterEvents.length;
             return (
-            <div id="album-print" className="min-h-screen bg-[#2B2A28] text-stone-100 px-6 py-8 sm:p-10 md:p-12 mx-4 md:mx-0 rounded-[2.5rem] md:rounded-[3rem] shadow-3xl relative overflow-hidden">
+            <div id="album-print" className="min-h-screen bg-[#2B2A28] text-stone-100 px-6 py-8 sm:p-10 md:p-12 mx-4 md:mx-0 rounded-3xl md:rounded-3xl shadow-3xl relative overflow-hidden">
               {/* Decorative elements */}
               <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
                  <div className="absolute top-1/4 right-0 w-96 h-96 bg-emerald-600/30 blur-[150px] rounded-full"></div>
@@ -1546,7 +1857,7 @@
                     <article key={memory.id} className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-16 items-center">
                       <div className={`md:col-span-7 ${idx % 2 === 0 ? 'md:order-1' : 'md:order-2'}`}>
                         {memory.mediaUrl ? (
-                          <div className="rounded-[2.5rem] overflow-hidden shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] border border-white/10 group">
+                          <div className="rounded-3xl overflow-hidden shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] border border-white/10 group">
                             {(() => {
                               const k = mediaKind(memory.mediaUrl, memory.type);
                               if (k === 'photo') return <img src={memory.mediaUrl} loading="lazy" className="w-full h-[50dvh] md:h-[70dvh] object-cover transition-transform duration-1000 group-hover:scale-110" alt="Ricordo" />;
@@ -1560,7 +1871,7 @@
                             })()}
                           </div>
                         ) : (
-                          <div className="bg-white/5 border border-white/5 rounded-[2.5rem] h-48 md:h-64 flex items-center justify-center">
+                          <div className="bg-white/5 border border-white/5 rounded-3xl h-48 md:h-64 flex items-center justify-center">
                              <i className="fa-solid fa-quote-left text-5xl text-stone-700"></i>
                           </div>
                         )}
@@ -1568,7 +1879,7 @@
                       <div className={`md:col-span-5 ${idx % 2 === 0 ? 'md:order-2' : 'md:order-1'}`}>
                         <div className="flex items-center gap-3 mb-5">
                           <span className="text-5xl md:text-6xl font-black text-white/10 tracking-tighter tabular-nums leading-none">{String(idx + 1).padStart(2, '0')}</span>
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/10 text-stone-300 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/10 text-stone-300 rounded-2xl text-[10px] font-black uppercase tracking-widest">
                             {getTypeIcon(memory.type, 'text-[10px]')} {formatDate(memory.date, true)}
                           </span>
                         </div>
@@ -1604,10 +1915,10 @@
                         ))}
                       </div>
                       <div className="flex flex-col sm:flex-row items-center justify-center gap-4 print:hidden">
-                        <button onClick={() => window.print()} className="w-full sm:w-auto h-16 px-10 bg-emerald-600 hover:bg-emerald-500 text-white rounded-[1.5rem] font-black text-lg transition-all shadow-xl shadow-emerald-900/40 flex items-center justify-center gap-3 active:scale-95">
+                        <button onClick={() => window.print()} className="w-full sm:w-auto h-16 px-10 bg-emerald-600 hover:bg-emerald-500 text-white rounded-3xl font-black text-lg transition-all shadow-xl shadow-emerald-900/40 flex items-center justify-center gap-3 active:scale-95">
                           <i className="fa-solid fa-file-pdf"></i> Salva PDF
                         </button>
-                        <button onClick={handleExportJSON} className="w-full sm:w-auto h-16 px-10 bg-white/5 hover:bg-white/10 text-white rounded-[1.5rem] font-black text-lg transition-all border border-white/10 flex items-center justify-center gap-3 active:scale-95">
+                        <button onClick={handleExportJSON} className="w-full sm:w-auto h-16 px-10 bg-white/5 hover:bg-white/10 text-white rounded-3xl font-black text-lg transition-all border border-white/10 flex items-center justify-center gap-3 active:scale-95">
                           <i className="fa-solid fa-code"></i> JSON Data
                         </button>
                       </div>
@@ -1626,10 +1937,10 @@
                 <div className="max-w-6xl mx-auto flex justify-between items-center">
                   <div className="flex items-center gap-4">
                     <div className="bg-emerald-600 w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-600/20">
-                      <i className="fa-solid fa-location-arrow text-xl text-white"></i>
+                      <span className="text-2xl leading-none">🤙</span>
                     </div>
                     <div>
-                      <h1 className="text-2xl font-black tracking-tighter text-stone-900 leading-none">VanDiary</h1>
+                      <h1 className="text-2xl font-black tracking-tighter text-stone-900 leading-none">Shaka</h1>
                       <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Catania &bull; Potenza</span>
                     </div>
                   </div>
@@ -1647,7 +1958,7 @@
                         <button
                           key={tab.id}
                           onClick={() => setActiveTab(tab.id)}
-                          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab.id ? 'bg-white text-emerald-700 shadow-sm border-stone-100 border' : 'text-stone-400 hover:text-stone-800'}`}
+                          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === tab.id ? 'bg-white text-emerald-700 shadow-sm border-stone-100 border' : 'text-stone-400 hover:text-stone-800'}`}
                         >
                           <i className={`fa-solid fa-${tab.icon}`}></i> {tab.label}
                         </button>
@@ -1674,7 +1985,7 @@
               <button
                 onClick={() => setActiveTab(activeTab === 'add' ? 'timeline' : 'add')}
                 style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom))' }}
-                className={`md:hidden fixed right-5 z-[60] w-16 h-16 rounded-[1.8rem] shadow-[0_15px_30px_-5px_rgba(0,87,255,0.4)] flex items-center justify-center transition-all active:scale-90 ${activeTab === 'add' ? 'bg-stone-800 rotate-45' : 'bg-emerald-600'}`}
+                className={`md:hidden fixed right-5 z-[60] w-16 h-16 rounded-3xl shadow-[0_15px_30px_-5px_rgba(0,87,255,0.4)] flex items-center justify-center transition-all active:scale-90 ${activeTab === 'add' ? 'bg-stone-800 rotate-45' : 'bg-emerald-600'}`}
               >
                 <i className="fa-solid fa-plus text-white text-2xl"></i>
               </button>
@@ -1705,15 +2016,15 @@
               {/* Mobile Top Header */}
               <div className="md:hidden safe-top pt-5 pb-4 px-5 flex items-center justify-between bg-transparent">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-600/20">
-                      <i className="fa-solid fa-location-arrow text-white"></i>
+                    <div className="w-10 h-10 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-600/20">
+                      <span className="text-lg leading-none">🤙</span>
                     </div>
-                    <h1 className="text-xl font-black tracking-tighter text-stone-900">VanDiary</h1>
+                    <h1 className="text-xl font-black tracking-tighter text-stone-900">Shaka</h1>
                   </div>
                   <button
                     onClick={() => { localStorage.removeItem(AUTH_KEY); setAuthed(false); }}
                     title="Esci"
-                    className="w-11 h-11 rounded-xl bg-stone-100/80 backdrop-blur border border-white flex items-center justify-center text-stone-400 active:scale-90 transition-all"
+                    className="w-11 h-11 rounded-2xl bg-stone-100/80 backdrop-blur border border-white flex items-center justify-center text-stone-400 active:scale-90 transition-all"
                   >
                     <i className="fa-solid fa-arrow-right-from-bracket"></i>
                   </button>
