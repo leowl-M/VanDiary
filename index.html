@@ -295,6 +295,7 @@
           const [vanFollow, setVanFollow] = useState(false);
           const [vanBusy, setVanBusy] = useState(false);
           const [geoMsg, setGeoMsg] = useState('');
+          const [showLegend, setShowLegend] = useState(false);
 
           const gameLevels = useMemo(() => [
             { id: 'tutte', label: 'Tutte', icon: 'shuffle', color: 'text-stone-700', bg: 'bg-stone-100/60', hex: '#44403c' },
@@ -917,20 +918,31 @@
               <div className="rounded-[2.5rem] shadow-2xl shadow-stone-200/50 border border-white/60 overflow-hidden relative">
                 <div ref={mapRef} className="w-full h-[70vh] z-0"></div>
 
-                <div className="absolute top-4 right-4 z-[999] glass-card px-4 py-3 rounded-2xl shadow-lg flex flex-col gap-2 max-h-[40vh] overflow-y-auto no-scrollbar">
-                 <div className="flex items-center gap-2 mb-1 border-b border-stone-200/30 pb-1 text-[11px] font-black uppercase text-stone-400 tracking-wider">Legenda</div>
-                 <div className="flex items-center gap-3 text-xs font-bold text-stone-700">
-                    <div className="w-3.5 h-3.5 rounded-full bg-[#0057FF] border-2 border-white shadow-sm flex items-center justify-center"><i className="fa-solid fa-van-shuttle text-white" style={{fontSize:'6px'}}></i></div> Van
-                 </div>
-                 <div className="flex items-center gap-3 text-xs font-bold text-stone-700">
-                    <div className="w-3.5 h-3.5 rounded-full bg-[#F97D16] border-2 border-white shadow-sm"></div> Tappe
-                 </div>
-                 {counterConfig.map(conf => (
-                   <div key={conf.key} className="flex items-center gap-3 text-xs font-bold text-stone-700">
-                     <div className="w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm" style={{backgroundColor: conf.hex}}></div>
-                     {conf.label}
-                   </div>
-                 ))}
+                <div className="absolute top-4 right-4 z-[999] flex flex-col items-end gap-2">
+                  <button
+                    onClick={() => setShowLegend(v => !v)}
+                    title="Legenda"
+                    className="w-10 h-10 glass-card rounded-2xl shadow-lg flex items-center justify-center text-stone-600 active:scale-90 transition-all"
+                  >
+                    <i className={`fa-solid ${showLegend ? 'fa-xmark' : 'fa-layer-group'}`}></i>
+                  </button>
+                  {showLegend && (
+                    <div className="glass-card px-4 py-3 rounded-2xl shadow-lg flex flex-col gap-2 max-h-[40vh] overflow-y-auto no-scrollbar">
+                     <div className="flex items-center gap-2 mb-1 border-b border-stone-200/30 pb-1 text-[11px] font-black uppercase text-stone-400 tracking-wider">Legenda</div>
+                     <div className="flex items-center gap-3 text-xs font-bold text-stone-700">
+                        <div className="w-3.5 h-3.5 rounded-full bg-[#0057FF] border-2 border-white shadow-sm flex items-center justify-center"><i className="fa-solid fa-van-shuttle text-white" style={{fontSize:'6px'}}></i></div> Van
+                     </div>
+                     <div className="flex items-center gap-3 text-xs font-bold text-stone-700">
+                        <div className="w-3.5 h-3.5 rounded-full bg-[#F97D16] border-2 border-white shadow-sm"></div> Tappe
+                     </div>
+                     {counterConfig.map(conf => (
+                       <div key={conf.key} className="flex items-center gap-3 text-xs font-bold text-stone-700">
+                         <div className="w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm" style={{backgroundColor: conf.hex}}></div>
+                         {conf.label}
+                       </div>
+                     ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Controlli VAN */}

@@ -45,7 +45,23 @@
       "ridere a ogni momento serio",
       "dover usare solo le maiuscole quando scrivi",
       "avere il naso che fischia quando respiri",
-      "dover salutare tutti con un inchino per un mese"
+      "dover salutare tutti con un inchino per un mese",
+      "avere un terzo braccio ma solo per tre secondi al giorno",
+      "parlare solo in rima per una settimana",
+      "avere i piedi che profumano di pizza",
+      "starnutire bolle di sapone",
+      "avere un gatto che ti giudica in silenzio tutto il giorno",
+      "poter teletrasportarti ma solo dentro i bagni pubblici",
+      "avere sempre una colonna sonora epica quando cammini",
+      "sudare profumo di cocco",
+      "avere i capelli che cambiano colore con l'umore",
+      "dover urlare 'ananas' ogni volta che ti emozioni",
+      "avere un piccione come assistente personale",
+      "poter parlare con le piante ma sentire solo lamentele",
+      "avere un'ombra che fa cose diverse da te",
+      "dover camminare come un granchio nei supermercati",
+      "ridere ogni volta che qualcuno dice 'grazie'",
+      "vedere la musica come colori nell'aria"
     ],
 
     // ---------- MEDIO: scenari col gruppo (usa i nomi) ----------
@@ -87,7 +103,23 @@
       "cucinare senza ricetta insieme a Simone",
       "fare un campionato di ping pong contro Simona",
       "tenere un segreto insieme a Stefano",
-      "fare un viaggio senza GPS con Mattia"
+      "fare un viaggio senza GPS con Mattia",
+      "fare un viaggio in van con Martina che cambia idea ogni 5 minuti",
+      "restare senza benzina di notte con Bruno",
+      "dividere l'ultimo posto letto con Martina",
+      "fare un trekking sotto il sole con Bruno che si lamenta",
+      "cucinare per tutti mentre Martina assaggia tutto",
+      "perderti nella metro di una città enorme con Bruno",
+      "organizzare una cena a sorpresa con Martina",
+      "fare un karaoke obbligatorio in duetto con Bruno",
+      "guidare 10 ore con Martina alla guida",
+      "montare la tenda mentre Bruno dà ordini",
+      "fare 3 ore di fila con Martina che spinge",
+      "dividere il bagno del campeggio con Bruno",
+      "fare un escape room con Martina che tocca tutto",
+      "affrontare un temporale in tenda con Bruno",
+      "decidere il ristorante mentre Martina dice 'per me è uguale'",
+      "fare le valigie all'ultimo minuto con Bruno"
     ],
 
     // ---------- ESTREMO: scelte impossibili e brutali ----------
@@ -125,7 +157,19 @@
       "usare la mano non dominante per sempre",
       "non poter più ascoltare la tua canzone preferita",
       "scegliere un solo amico da rivedere per sempre",
-      "passare un anno intero senza parlare con nessuno"
+      "passare un anno intero senza parlare con nessuno",
+      "dire sempre la verità anche quando ferisce",
+      "leggere i messaggi privati dei tuoi amici per un giorno",
+      "tagliare metà invitati dal tuo matrimonio",
+      "sapere cosa pensano davvero gli altri di te",
+      "rinunciare a vincere ogni discussione per sempre",
+      "confessare il tuo segreto più imbarazzante in pubblico",
+      "vivere un anno senza telefono ma anche senza i tuoi amici",
+      "cambiare un errore del passato ma dimenticare una persona",
+      "dare un voto sincero in faccia a ogni amico",
+      "rinunciare per sempre alla tua opinione su tutto",
+      "sapere il giorno esatto di ogni cosa brutta che ti capiterà",
+      "essere sempre l'ultima scelta ma vincere sempre alla fine"
     ]
   };
 
