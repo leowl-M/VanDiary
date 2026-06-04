@@ -420,12 +420,24 @@
           const geocodeCache = useRef({});
           const geoBackfillDone = useRef(false);
 
-          // GPS affidabile: alta precisione, timeout generoso, Promise.
-          const getPosition = (opts = {}) => new Promise((resolve, reject) => {
+          // GPS affidabile: HTTPS richiesto, race anti-blocco, fallback bassa precisione.
+          const getPosition = () => new Promise((resolve, reject) => {
             if (!('geolocation' in navigator)) { reject({ code: 0 }); return; }
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              enableHighAccuracy: true, timeout: 15000, maximumAge: 10000, ...opts
-            });
+            // Geolocation funziona solo in contesto sicuro (HTTPS o localhost).
+            if (typeof window !== 'undefined' && window.isSecureContext === false) {
+              reject({ code: 4 }); return;
+            }
+            let done = false;
+            const ok = (p) => { if (!done) { done = true; clearTimeout(hardTimer); resolve(p); } };
+            const ko = (e) => { if (!done) { done = true; clearTimeout(hardTimer); reject(e); } };
+            // Anti-blocco: se nessun callback arriva (bug iOS col prompt), rifiuta comunque.
+            const hardTimer = setTimeout(() => ko({ code: 3 }), 22000);
+            // 1° tentativo: alta precisione. Se fallisce/scade → fallback bassa precisione.
+            navigator.geolocation.getCurrentPosition(
+              ok,
+              () => navigator.geolocation.getCurrentPosition(ok, ko, { enableHighAccuracy: false, timeout: 18000, maximumAge: 60000 }),
+              { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+            );
           });
 
           const geoError = (e) => {
@@ -433,6 +445,7 @@
             if (e.code === 1) return 'Permesso negato: abilita la posizione nelle impostazioni.';
             if (e.code === 2) return 'Posizione non disponibile in questo momento.';
             if (e.code === 3) return 'GPS lento: riprova all\'aperto.';
+            if (e.code === 4) return 'GPS bloccato: apri l\'app via HTTPS.';
             return 'GPS non supportato su questo dispositivo.';
           };
 
@@ -583,9 +596,17 @@
             let coords = memoryCoords;
             if (!coords) coords = await geocodePlace(location);
 
+            // Tipo reale dal MIME del file (evita video salvati come "audio").
+            let finalType = memoryType;
+            if (mediaFile && mediaFile.type) {
+              if (mediaFile.type.startsWith('video/')) finalType = 'video';
+              else if (mediaFile.type.startsWith('audio/')) finalType = 'audio';
+              else if (mediaFile.type.startsWith('image/')) finalType = 'photo';
+            }
+
             const newMemory = {
               id: Date.now().toString(),
-              type: memoryType,
+              type: finalType,
               title, location, date, text,
               media_url: mediaUrl,
               lat: coords?.lat || null,
@@ -626,6 +647,45 @@
             return dt.toLocaleDateString('it-IT', long
               ? { day: 'numeric', month: 'long', year: 'numeric' }
               : { day: '2-digit', month: 'short' });
+          };
+
+          // Determina il tipo di player dall'estensione reale del file (non dal tipo salvato).
+          const mediaKind = (url, fallback) => {
+            const ext = (url || '').split('?')[0].split('.').pop().toLowerCase();
+            if (['mp4', 'webm', 'mov', 'm4v', 'mkv', 'avi', '3gp', 'quicktime'].includes(ext)) return 'video';
+            if (['mp3', 'm4a', 'wav', 'aac', 'oga', 'ogg', 'opus', 'flac'].includes(ext)) return 'audio';
+            if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'avif', 'bmp'].includes(ext)) return 'photo';
+            return fallback || 'photo';
+          };
+
+          // Render media robusto: sceglie l'elemento giusto + link "apri originale" di fallback.
+          const renderMedia = (url, fallbackType, { imgClass = '', videoClass = '', dark = false } = {}) => {
+            if (!url) return null;
+            const kind = mediaKind(url, fallbackType);
+            const linkColor = dark ? 'text-stone-400 hover:text-white' : 'text-stone-400 hover:text-emerald-600';
+            const fallbackLink = (
+              <a href={url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                 className={`flex items-center justify-center gap-2 py-2 text-[11px] font-black uppercase tracking-widest transition-colors ${linkColor}`}>
+                <i className="fa-solid fa-arrow-up-right-from-square"></i> Apri originale
+              </a>
+            );
+            if (kind === 'photo') {
+              return <img src={url} loading="lazy" alt="" className={imgClass} />;
+            }
+            if (kind === 'video') {
+              return (
+                <>
+                  <video src={url} controls playsInline preload="metadata" className={videoClass}></video>
+                  {fallbackLink}
+                </>
+              );
+            }
+            return (
+              <div className={dark ? 'bg-white/5 p-4' : 'p-4'}>
+                <audio src={url} controls preload="metadata" className="w-full"></audio>
+                {fallbackLink}
+              </div>
+            );
           };
 
           const getTypeIcon = (type, className = "text-xl") => {
@@ -923,9 +983,7 @@
                           </div>
                           {selectedPinInfo.mediaUrl && (
                             <div className="mb-6 rounded-[1.5rem] overflow-hidden bg-stone-100/50 shadow-inner">
-                              {selectedPinInfo.type === 'photo' && <img src={selectedPinInfo.mediaUrl} alt={selectedPinInfo.title} className="w-full max-h-[40vh] object-contain" />}
-                              {selectedPinInfo.type === 'video' && <video src={selectedPinInfo.mediaUrl} controls className="w-full max-h-[40vh] object-contain bg-black" />}
-                              {selectedPinInfo.type === 'audio' && <audio src={selectedPinInfo.mediaUrl} controls className="w-full p-4" />}
+                              {renderMedia(selectedPinInfo.mediaUrl, selectedPinInfo.type, { imgClass: 'w-full max-h-[40vh] object-contain', videoClass: 'w-full max-h-[40vh] object-contain bg-black' })}
                             </div>
                           )}
                           {selectedPinInfo.text && (
@@ -1151,9 +1209,7 @@
                         
                         {memory.mediaUrl && (
                           <div className="mb-6 rounded-[1.5rem] overflow-hidden bg-stone-100 ring-1 ring-stone-200/20 shadow-inner">
-                            {memory.type === 'photo' && <img src={memory.mediaUrl} alt={memory.title} className="w-full max-h-[50vh] object-cover" />}
-                            {memory.type === 'video' && <video src={memory.mediaUrl} controls className="w-full max-h-[50vh] object-cover" />}
-                            {memory.type === 'audio' && <audio src={memory.mediaUrl} controls className="w-full p-4" />}
+                            {renderMedia(memory.mediaUrl, memory.type, { imgClass: 'w-full max-h-[50vh] object-cover', videoClass: 'w-full max-h-[50vh] object-contain bg-black' })}
                           </div>
                         )}
                         
@@ -1459,14 +1515,17 @@
                       <div className={`md:col-span-7 ${idx % 2 === 0 ? 'md:order-1' : 'md:order-2'}`}>
                         {memory.mediaUrl ? (
                           <div className="rounded-[2.5rem] overflow-hidden shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] border border-white/10 group">
-                            {memory.type === 'photo' && <img src={memory.mediaUrl} className="w-full h-[50vh] md:h-[70vh] object-cover transition-transform duration-1000 group-hover:scale-110" alt="Ricordo" />}
-                            {memory.type === 'video' && <video src={memory.mediaUrl} className="w-full h-[50vh] md:h-[70vh] object-cover" controls />}
-                            {memory.type === 'audio' && (
-                              <div className="bg-white/5 h-48 md:h-64 flex flex-col items-center justify-center p-8">
-                                 <i className="fa-solid fa-microphone text-5xl text-emerald-500 mb-6"></i>
-                                 <audio src={memory.mediaUrl} controls className="w-full" />
-                              </div>
-                            )}
+                            {(() => {
+                              const k = mediaKind(memory.mediaUrl, memory.type);
+                              if (k === 'photo') return <img src={memory.mediaUrl} loading="lazy" className="w-full h-[50vh] md:h-[70vh] object-cover transition-transform duration-1000 group-hover:scale-110" alt="Ricordo" />;
+                              if (k === 'video') return renderMedia(memory.mediaUrl, 'video', { videoClass: 'w-full h-[50vh] md:h-[70vh] object-contain bg-black', dark: true });
+                              return (
+                                <div className="bg-white/5 py-8 px-6 flex flex-col items-center">
+                                  <i className="fa-solid fa-microphone text-5xl text-emerald-500 mb-6"></i>
+                                  {renderMedia(memory.mediaUrl, 'audio', { dark: true })}
+                                </div>
+                              );
+                            })()}
                           </div>
                         ) : (
                           <div className="bg-white/5 border border-white/5 rounded-[2.5rem] h-48 md:h-64 flex items-center justify-center">
