@@ -325,6 +325,7 @@
           const [vanBusy, setVanBusy] = useState(false);
           const [geoMsg, setGeoMsg] = useState('');
           const [showLegend, setShowLegend] = useState(false);
+          const [timelineSort, setTimelineSort] = useState('desc');
 
           const gameLevels = useMemo(() => [
             { id: 'tutte', label: 'Tutte', icon: 'shuffle', color: 'text-stone-700', bg: 'bg-stone-100/60', hex: '#44403c' },
@@ -1459,9 +1460,25 @@
             </div>
           );
 
-          const renderTimelineView = () => (
+          const renderTimelineView = () => {
+            const ordered = timelineSort === 'desc' ? [...memories].slice().reverse() : memories;
+            return (
             <div className="max-w-3xl mx-auto py-6 md:py-8 px-4">
               {sectionHeader('location-arrow', 'Il Diario', 'Catania → Potenza', '#3D5AFE')}
+
+              {memories.length > 1 && (
+                <div className="flex items-center gap-2 mb-6 -mt-2">
+                  {[
+                    { id: 'desc', label: 'Più recenti', icon: 'arrow-down-wide-short' },
+                    { id: 'asc', label: 'Cronologico', icon: 'arrow-up-wide-short' },
+                  ].map(o => (
+                    <button key={o.id} onClick={() => setTimelineSort(o.id)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest transition-all border ${timelineSort === o.id ? 'bg-stone-900 text-white border-stone-900' : 'bg-white/60 text-stone-500 border-stone-200'}`}>
+                      <i className={`fa-solid fa-${o.icon}`}></i> {o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="relative space-y-8">
                 {memories.length === 0 ? (
@@ -1470,7 +1487,7 @@
                     <p className="text-stone-400 font-black uppercase tracking-widest text-xs">Ancora nessun ricordo...</p>
                   </div>
                 ) : (
-                  memories.map((memory, index) => (
+                  ordered.map((memory, index) => (
                     <div key={memory.id} className="relative group">
                       <div className="glass-card p-5 md:p-8 rounded-3xl shadow-xl shadow-stone-200/30 border-white/60 hover:shadow-2xl transition-all duration-300">
                         <div className="flex justify-between items-start mb-4">
@@ -1527,7 +1544,8 @@
                 )}
               </div>
             </div>
-          );
+            );
+          };
 
           const renderStatsView = () => {
             const totalEvents = counterEvents.length;
