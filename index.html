@@ -460,7 +460,7 @@
             setLoadError(false);
             try {
               const [memRes, evtRes] = await Promise.all([
-                sb.from('memories').select('*').order('date'),
+                sb.from('memories').select('*').order('date').order('id'),
                 sb.from('counter_events').select('*').order('timestamp')
               ]);
               if (memRes.error || evtRes.error) throw (memRes.error || evtRes.error);
@@ -861,7 +861,7 @@
             const { data, error } = await sb.from('memories').insert(newMemory).select().single();
             if (!error && data) {
               const memForState = { ...data, mediaUrl: data.media_url };
-              setMemories(prev => [...prev, memForState].sort((a, b) => new Date(a.date) - new Date(b.date)));
+              setMemories(prev => [...prev, memForState].sort((a, b) => (new Date(a.date) - new Date(b.date)) || String(a.id).localeCompare(String(b.id))));
             }
 
             setSaving(false);
